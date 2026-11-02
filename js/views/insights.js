@@ -2,7 +2,7 @@ import * as M from '../model.js';
 import { UNGROUPED } from '../data.js';
 import { esc, fmtNum, fmtKg, fmtDate, fmtMonthKey, isNum, sum, today, monthKey, addMonthKey, monthStart, monthEnd, dateRange, dow } from '../util.js';
 import { openSheet } from '../ui.js';
-import { lineChart, barChart } from '../charts.js';
+import { lineChart, barChart, donut } from '../charts.js';
 import { head, NL, nl, recapBlock } from './common.js';
 import { exerciseSheet } from './train.js';
 
@@ -26,9 +26,12 @@ export function renderInsights(root, ctx) {
     </section>
     ${M.isRecapDay(t) ? recapBlock(M.weekRecap(t)) : ''}
     ${muscleBlock(from, to)}
+    ${setsBlock(from, to)}
     ${exerciseBlock(from, to)}
+    ${effortBlock(from, to)}
     ${bodyweightBlock(from, to)}
     ${nutritionBlock(from, to, C)}
+    ${adherenceBlock(from, to)}
     ${runBlock(from, to)}
     ${heatBlock(from, to)}
     ${reviewBlock()}
@@ -55,9 +58,51 @@ function muscleBlock(from, to) {
       <h2 class="h2">Weekly volume by muscle group</h2>
       ${total ? `<p class="chartblock__key">${pr && wm.totals.has(pr) ? `${fmtNum(wm.totals.get(pr))} kg <small>${esc(pr)}, your priority group</small>` : `${fmtNum(total)} kg <small>all groups</small>`}</p>
         ${barChart({ bars, label: 'Weekly volume by muscle group', tones: toneList })}
-        <ul class="legend">${[...(pr && wm.totals.has(pr) ? [pr] : []), ...order].map((g) => `<li class="${g === pr ? 'is-gold' : `tone-${tones[g]}`}"><span class="legend__sw"></span>${esc(cap(g))}${g === UNGROUPED ? ' <small>(no muscle_group in cycle.json)</small>' : ''}<span class="legend__v">${fmtNum(wm.totals.get(g))} kg</span></li>`).join('')}</ul>
+        <div class="split">
+          ${donut({ segments: [...(pr && wm.totals.has(pr) ? [{ label: pr, v: wm.totals.get(pr), gold: true }] : []), ...order.map((g) => ({ label: g, v: wm.totals.get(g) }))], tones: [...(pr && wm.totals.has(pr) ? [0] : []), ...order.map((g) => tones[g])], size: 132, center: pr && wm.totals.has(pr) ? `${Math.round((wm.totals.get(pr) / total) * 100)}%` : `${wm.groups.length}`, sub: pr && wm.totals.has(pr) ? esc(pr) : 'groups', label: 'Share of volume by muscle group' })}
+        <ul class="legend">${[...(pr && wm.totals.has(pr) ? [pr] : []), ...order].map((g) => `<li class="${g === pr ? 'is-gold' : `tone-${tones[g]}`}"><span class="legend__sw"></span>${esc(cap(g))}${g === UNGROUPED ? ' <small>(no muscle_group in cycle.json)</small>' : ''}<span class="legend__v">${fmtNum(wm.totals.get(g))} kg <small>${Math.round((wm.totals.get(g) / total) * 100)}%</small></span></li>`).join('')}</ul>
+        </div>
         <button class="link" data-more="muscle">Week by week</button>`
       : `<p class="quiet">${NL}: no sets with a load in this range.</p>`}
+    </section>`;
+}
+
+// ---------------------------------------------------------------- weekly sets
+function setsBlock(from, to) {
+  const weeks = M.setsByWeek(from, to);
+  const total = sum(weeks.map((w) => w.sets));
+  return `
+    <section class="chartblock" data-chart="sets" data-from="${from}" data-to="${to}">
+      <h2 class="h2">Sets per week</h2>
+      ${total ? `<p class="chartblock__key">${fmtNum(total)} sets <small>${fmtNum(sum(weeks.map((w) => w.reps)))} reps in this range</small></p>
+        ${barChart({ bars: weeks.map((w) => ({ key: w.week, label: fmtDate(w.week), stack: [{ v: w.sets, name: 'sets' }] })), label: 'Sets per week', values: weeks.length <= 8 })}`
+      : `<p class="quiet">${NL}: no sets ticked in this range.</p>`}
+    </section>`;
+}
+
+// ---------------------------------------------------------------- effort trend
+function effortBlock(from, to) {
+  const pts = M.effortTrend(from, to);
+  return `
+    <section class="chartblock" data-chart="effort" data-from="${from}" data-to="${to}">
+      <h2 class="h2">Effort</h2>
+      ${pts.length ? `<p class="chartblock__key">${fmtNum(sum(pts.map((p) => p.y)) / pts.length, 1)} <small>average effort out of 10 over ${pts.length} session${pts.length === 1 ? '' : 's'} with a score</small></p>
+        ${lineChart({ points: pts, x0: from, x1: to, dp: 1, label: 'Average effort per session', tickDp: 0 })}`
+      : `<p class="quiet">${NL}: no effort scores in this range.</p>`}
+    </section>`;
+}
+
+// ---------------------------------------------------------------- plan adherence
+function adherenceBlock(from, to) {
+  const weeks = M.adherenceByWeek(from, to).filter((w) => w.planned);
+  if (!weeks.length) return `<section class="chartblock" data-chart="adherence" data-from="${from}" data-to="${to}"><h2 class="h2">Plan done</h2><p class="quiet">${NL}: no planned days in this range.</p></section>`;
+  const done = sum(weeks.map((w) => w.done)), planned = sum(weeks.map((w) => w.planned));
+  return `
+    <section class="chartblock" data-chart="adherence" data-from="${from}" data-to="${to}">
+      <h2 class="h2">Plan done</h2>
+      <p class="chartblock__key">${Math.round((done / planned) * 100)}% <small>${done} of ${planned} planned meals, sets and runs ticked</small></p>
+      ${barChart({ bars: weeks.map((w) => ({ key: w.week, label: fmtDate(w.week), stack: [{ v: Math.round(w.pct), name: '%' }] })), label: 'Share of the plan done per week', values: weeks.length <= 8 })}
+      <p class="fine">Per week, up to today. Weeks start on Monday.</p>
     </section>`;
 }
 

@@ -42,7 +42,7 @@ To use a cycle: copy the file's full text, open the app, tap the gear (Settings)
 |---|---|---|---|
 | `cycle_name` | yes | string | Shown under the date on Today. |
 | `start_date` | yes | date | First day of the cycle. Used for "Day X of Y", the bodyweight path and "This cycle" export. |
-| `end_date` | yes | date | Last day of the cycle (inclusive). Days of stock and the shopping list run to this date. |
+| `end_date` | yes | date | Last day of the cycle (inclusive). The pantry's "needs" figure and the shopping list run to this date. |
 | `daily_kcal_target` | yes | number | Target for the energy ring and the dashed line on the energy chart. |
 | `daily_protein_target_g` | yes | number | Target for the protein ring, in grams. |
 | `bodyweight_start_kg` | no | number | Start of the dashed bodyweight path. |
@@ -92,7 +92,7 @@ Slot types:
 | Field | Required | Type | Meaning |
 |---|---|---|---|
 | `name` | yes | string | Shown on the row. |
-| `item_id` | for pantry | string | Must match a `pantry[].item_id` to be subtracted from the pantry and to appear in days of stock and the shopping list. Items without one are listed as "not tracked". Items with an id but no pantry line show "not in pantry list". |
+| `item_id` | for pantry | string | Must match a `pantry[].item_id` to be subtracted from the pantry and to appear in its "needs" figure and the shopping list. Items without one are listed as "not tracked". Items with an id but no pantry line show "not in pantry list". |
 | `grams` | yes | number > 0 | The planned portion in grams. |
 | `kcal` | meal: yes | number | kcal for **this planned portion** (not per 100 g). |
 | `protein_g` | meal: yes | number | Protein in grams for **this planned portion**. |
@@ -217,7 +217,7 @@ How the phone uses it: the first time a line appears, or whenever an imported fi
 | Volume | Sets × reps × kg of ticked sets only. Sets without a load count as sets and reps, not volume. |
 | PR | A set's kg beats your best kg for that exercise on any **earlier** date. No history, no PR. |
 | Estimated 1RM | **Estimate**, Epley formula: kg × (1 + reps ÷ 30), only from sets of 1 to 10 reps. Always labelled "estimate". |
-| Days of stock | Stock in grams ÷ (planned grams of that item from today to `end_date` ÷ number of those days). Today's already-ticked meals are excluded from the plan because they were already subtracted. "No planned use" when the item is not in the remaining plan. Shown in gold when it runs out before `end_date`. |
+| Pantry: have against need | Current amount against the planned grams of that item from today to `end_date`, converted to the line's unit. Today's already-ticked meals are excluded because they were already subtracted. "No planned use" when the item is not in the remaining plan. |
 | Shopping list | Planned grams from today to `end_date` minus current stock, per item, shortfalls only, labelled "based on counted" or "based on calculated". |
 | Averages (kcal, protein) | Only over days with at least one ticked meal. |
 | Weekly recap (Sundays) | Monday to Sunday: days completed, averages, sessions, volume and PRs, from logged data only. |
@@ -228,7 +228,7 @@ A file with `"schema_version": 1` (or the older format without `muscle_group`) s
 
 ## Worked example
 
-A two-day cycle with one lifting day and one run. Hand arithmetic for 1 March: breakfast is 80 g oats (304 kcal, 10.4 g protein) + 200 g yogurt (120 kcal, 20 g), so ticking it fills the rings to 424 kcal and 30.4 g. Oats: 500 g in stock, 160 g planned over 2 days = 80 g a day, so 500 ÷ 80 = 6.3 days of stock. Squat 3 × 5 × 60 kg = 900 kg volume; estimated 1RM 60 × (1 + 5 ÷ 30) = 70 kg (estimate).
+A two-day cycle with one lifting day and one run. Hand arithmetic for 1 March: breakfast is 80 g oats (304 kcal, 10.4 g protein) + 200 g yogurt (120 kcal, 20 g), so ticking it fills the rings to 424 kcal and 30.4 g. Oats: 500 g in stock, the plan needs 2 × 80 = 160 g, so nothing to buy. Squat 3 × 5 × 60 kg = 900 kg volume; estimated 1RM 60 × (1 + 5 ÷ 30) = 70 kg (estimate).
 
 ```json
 {

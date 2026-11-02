@@ -1,6 +1,7 @@
 import * as M from '../model.js';
-import { esc, fmtNum, fmtKg, fmtDate, isNum, num, haptic } from '../util.js';
+import { esc, fmtKg, fmtDate, isNum, num, haptic } from '../util.js';
 import { openSheet, closeSheet, toast } from '../ui.js';
+import { donut, haveNeed } from '../charts.js';
 import { head } from './common.js';
 
 const recounting = new Set();
@@ -13,27 +14,29 @@ export function renderFuel(root, ctx) {
   const board = M.pantryBoard();
   const plan = M.remainingPlan();
   const shop = M.shoppingList();
-  const withDays = board.filter((r) => isNum(r.daysLeft));
-  const shortest = withDays.slice().sort((a, b) => a.daysLeft - b.daysLeft)[0] || null;
-  const maxDays = Math.max(plan.days, ...withDays.map((r) => r.daysLeft), 1);
+  const toBuy = shop.rows.length;
+  const covered = board.filter((r) => isNum(r.need) && !r.short).length;
+  const short = board.filter((r) => r.short).length;
+  const other = board.length - covered - short;
 
   root.innerHTML = `
     ${head(ctx, '<span>Fuel</span>')}
-    <section class="hero" aria-label="Stock">
-      ${shortest ? `
-        <p class="hero__figure figure${shortest.runsOut ? ' is-warm' : ''}" data-hero>${fmtNum(shortest.daysLeft, 1)}<span class="hero__of"> days</span></p>
-        <p class="hero__label">of ${esc(shortest.name)} left, the shortest stock${shortest.runsOut ? '. It runs out before the cycle ends.' : '. Everything lasts to the end of the cycle.'}</p>`
-      : `<p class="hero__figure figure">—</p><p class="hero__label">${C.pantry.length ? 'No pantry item has planned use in the remaining days.' : 'No pantry list in cycle.json.'}</p>`}
-      <p class="hero__sub">${plan.days ? `${plan.days} day${plan.days === 1 ? '' : 's'} left in the cycle, today to ${fmtDate(plan.to)}` : 'The cycle has ended.'}</p>
+    <section class="hero hero--split" aria-label="Shopping">
+      <div>
+        <p class="hero__figure figure${toBuy ? ' is-warm' : ''}" data-hero>${toBuy}</p>
+        <p class="hero__label">${toBuy === 1 ? 'item' : 'items'} to buy for the rest of the cycle</p>
+        <p class="hero__sub">${plan.days ? `${plan.days} day${plan.days === 1 ? '' : 's'} left, today to ${fmtDate(plan.to)}` : 'The cycle has ended.'}</p>
+      </div>
+      ${board.length ? `<div class="hero__graphic">${donut({ segments: [{ label: 'Covered', v: covered, gold: true }, { label: 'Short', v: short }, { label: 'No planned use', v: other }], tones: [0, 1, 3], size: 128, center: `${covered}/${board.length}`, sub: 'covered', label: 'Pantry items covered for the rest of the cycle' })}</div>` : ''}
     </section>
 
-    <section aria-label="Pantry">
+    <section class="panel" aria-label="Pantry">
       <h2 class="h2">Pantry</h2>
-      <p class="sub">Days of stock = stock ÷ average planned use per day over the remaining days.</p>
-      <ul class="rows board">${board.map((r) => boardRow(r, maxDays, plan.days)).join('') || '<li class="quiet">No pantry list in cycle.json.</li>'}</ul>
+      <p class="sub">What you have, against what the rest of the plan needs.</p>
+      <ul class="rows board">${board.map(boardRow).join('') || '<li class="quiet">No pantry list in cycle.json.</li>'}</ul>
     </section>
 
-    <section aria-label="Shopping list">
+    <section class="panel" aria-label="Shopping list">
       <h2 class="h2">Shopping list</h2>
       <p class="sub">${shop.days ? `Planned use from today to ${fmtDate(shop.to)} minus what you have. Shortfalls only.` : 'The cycle has ended.'}</p>
       ${shop.rows.length ? `<ul class="rows shop">${shop.rows.map(shopRow).join('')}</ul>` : `<p class="quiet">${shop.days ? 'Nothing is short for the rest of the cycle.' : ''}</p>`}
@@ -42,23 +45,20 @@ export function renderFuel(root, ctx) {
   bind(root, ctx);
 }
 
-function boardRow(r, maxDays, remaining) {
+function boardRow(r) {
   const open = recounting.has(r.id);
-  let days;
-  if (r.noUse) days = `<span class="board__days is-quiet">no planned use</span>`;
-  else if (r.noConversion) days = `<span class="board__days is-quiet">needs grams_per_unit</span>`;
-  else days = `<span class="board__days${r.runsOut ? ' is-warm' : ''}"><strong>${fmtNum(r.daysLeft, 1)}</strong> days</span>`;
-  const runway = isNum(r.daysLeft) && remaining
-    ? `<span class="runway" aria-hidden="true"><span class="runway__line${r.runsOut ? ' is-warm' : ''}" style="width:${Math.min(100, (r.daysLeft / maxDays) * 100).toFixed(1)}%"></span><span class="runway__end" style="left:${((remaining / maxDays) * 100).toFixed(1)}%"></span></span>` : '';
+  const needTxt = r.noUse ? 'no planned use for the rest of the cycle'
+    : r.noConversion ? `${esc(r.unit)} needs grams_per_unit to compare`
+      : `needs ${fmtKg(r.need)} ${esc(r.unit)} for the rest of the cycle`;
   return `
-    <li class="row board__row${r.runsOut ? ' runs-out' : ''}" data-item="${esc(r.id)}">
+    <li class="row board__row${r.short ? ' is-short' : ''}" data-item="${esc(r.id)}">
       <div class="board__main" data-open="${esc(r.id)}" role="button" tabindex="0" aria-label="${esc(r.name)} details">
         <span class="board__name">${esc(r.name)}</span>
-        <span class="board__qty">${qty(r)}<span class="board__src">, ${label(r.source, r.as_of)}</span></span>
-        ${runway}
+        <span class="board__qty"><strong>${qty(r)}</strong><span class="board__src">, ${label(r.source, r.as_of)}</span></span>
+        ${haveNeed(r.quantity, r.need)}
+        <span class="board__need${r.short ? ' is-warm' : ''}">${needTxt}</span>
       </div>
-      <div class="board__side">${days}
-        ${open ? '' : `<button class="link" data-recount="${esc(r.id)}">Recount</button>`}</div>
+      <div class="board__side">${open ? '' : `<button class="link" data-recount="${esc(r.id)}">Recount</button>`}</div>
       ${open ? `<form class="inline-form" data-recount-form="${esc(r.id)}">
         <label class="box box--wide"><input type="text" inputmode="decimal" name="q" placeholder="measured" aria-label="Measured ${esc(r.name)} in ${esc(r.unit)}" data-focus-key="rc:${esc(r.id)}"><span>${esc(r.unit)}</span></label>
         <button class="btn btn--gold btn--sm" type="submit">Save count</button>
@@ -70,6 +70,7 @@ function shopRow(r) {
   if (r.notInPantry) return `<li class="row shop__row"><span>${esc(r.name)}</span><span class="shop__amt">${fmtKg(r.grams)} g planned</span><span class="shop__basis">not in pantry list</span></li>`;
   if (r.noConversion) return `<li class="row shop__row"><span>${esc(r.name)}</span><span class="shop__amt">${fmtKg(r.grams)} g planned</span><span class="shop__basis">${esc(r.unit)} needs grams_per_unit to compare</span></li>`;
   return `<li class="row shop__row" data-shop="${esc(r.id)}"><span>${esc(r.name)}</span><span class="shop__amt">${fmtKg(r.deficit)} ${esc(r.unit)}</span>
+    ${haveNeed(r.have, r.need)}
     <span class="shop__basis">based on ${esc(r.basis)}${r.as_of ? ` ${fmtDate(r.as_of)}` : ''}: need ${fmtKg(r.need)}, have ${fmtKg(r.have)}</span></li>`;
 }
 
@@ -102,12 +103,12 @@ function itemSheet(ctx, id) {
     <section class="hero hero--sheet">
       <p class="hero__figure figure">${isNum(r.quantity) ? fmtKg(r.quantity) : '—'}<span class="hero__of"> ${esc(r.unit)}</span></p>
       <p class="hero__label">${label(r.source, r.as_of)}</p>
+      ${haveNeed(r.quantity, r.need)}
     </section>
     <dl class="facts">
       <div><dt>Planned use, rest of cycle</dt><dd>${r.plannedG ? `${fmtKg(r.plannedG)} g over ${r.remainingDays} days` : 'none'}</dd></div>
-      ${r.avgDaily ? `<div><dt>Average a day</dt><dd>${fmtNum(r.avgDaily, 1)} g</dd></div>` : ''}
-      ${isNum(r.stockG) ? `<div><dt>Stock in grams</dt><dd>${fmtKg(r.stockG)} g${r.line.grams_per_unit ? ` <small>at ${fmtKg(r.line.grams_per_unit)} g each</small>` : ''}</dd></div>` : ''}
-      <div><dt>Days of stock</dt><dd>${r.noUse ? 'no planned use' : r.noConversion ? 'needs grams_per_unit' : `${fmtNum(r.daysLeft, 1)} <small>${fmtKg(r.stockG)} ÷ ${fmtNum(r.avgDaily, 1)}</small>`}</dd></div>
+      ${isNum(r.need) ? `<div><dt>In ${esc(r.unit)}</dt><dd>${fmtKg(r.need)} ${esc(r.unit)}${r.line.grams_per_unit ? ` <small>at ${fmtKg(r.line.grams_per_unit)} g each</small>` : ''}</dd></div>
+      <div><dt>${r.short ? 'Short by' : 'Left over at the end'}</dt><dd>${fmtKg(Math.abs(r.need - r.quantity))} ${esc(r.unit)}</dd></div>` : ''}
     </dl>
     <form class="inline-form" data-bought>
       <label class="box box--wide"><input type="text" inputmode="decimal" name="q" placeholder="amount bought" aria-label="Amount bought in ${esc(r.unit)}"><span>${esc(r.unit)}</span></label>

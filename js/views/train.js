@@ -2,7 +2,7 @@ import * as M from '../model.js';
 import { exKey } from '../data.js';
 import { esc, fmtNum, fmtKg, fmtDate, fmtDow, today, addDays, isNum, num, haptic, fmtClock, parseClock, fmtPace } from '../util.js';
 import { openSheet, toast, ICON } from '../ui.js';
-import { lineChart } from '../charts.js';
+import { lineChart, sparkline, progressBar, barChart } from '../charts.js';
 import { startRest, stopRest } from '../rest.js';
 import { head } from './common.js';
 
@@ -32,6 +32,7 @@ export function renderTrain(root, ctx) {
       <section class="hero" aria-label="Session progress">
         <p class="hero__figure figure" data-hero>${sp.done}<span class="hero__of"> / ${sp.planned}</span></p>
         <p class="hero__label">sets done${ses.title ? `, ${esc(ses.title)}` : ''}</p>
+        ${progressBar(sp.done, sp.planned, { label: 'Sets done' })}
         <p class="hero__sub">${sum.volume != null ? `${fmtNum(sum.volume)} kg volume so far` : 'Volume not logged yet'}${sum.prs.length ? `, ${sum.prs.length} PR${sum.prs.length === 1 ? '' : 's'}` : ''}</p>
       </section>
       <ol class="exercises">${ses.exercises.map((ex, xi) => exerciseBlock(date, ex, xi)).join('')}</ol>`}
@@ -65,7 +66,7 @@ function exerciseBlock(date, ex, xi) {
     <li class="ex" data-ex="${xi}">
       <button class="ex__name" data-detail="${esc(exKey(ex))}">${esc(ex.name)}</button>
       <p class="ex__plan">${ex.sets} × ${isNum(ex.reps) ? ex.reps : '?'}${isNum(ex.load_kg) ? ` at ${fmtKg(ex.load_kg)} kg` : ', no load'}, rest ${fmtClock(restS)}${ex.muscle ? `, ${esc(ex.muscle)}` : ''}</p>
-      ${last ? `<p class="ex__last">last: ${last.load != null ? `${fmtKg(last.load)} kg` : 'no load'} × ${last.reps ?? '?'}<small>, ${fmtDate(last.date)}</small></p>` : ''}
+      ${last ? `<div class="ex__lastrow"><p class="ex__last">last: ${last.load != null ? `${fmtKg(last.load)} kg` : 'no load'} × ${last.reps ?? '?'}<small>, ${fmtDate(last.date)}</small></p>${sparkline(M.recentLoads(ex), { label: `Heaviest set, last sessions of ${ex.name}` })}</div>` : ''}
       ${ex.notes ? `<p class="ex__notes">${esc(ex.notes)}</p>` : ''}
       <ol class="sets">${sets}</ol>
       <p class="fine">${fromHistory ? 'Boxes are prefilled from your last logged set.' : 'Boxes are prefilled from the plan.'}</p>
@@ -170,6 +171,7 @@ function summarySheet(date) {
       <div><dt>PRs</dt><dd>${s.prs.length}</dd></div>
     </dl>
     ${s.prs.length ? `<ul class="list">${s.prs.map((p) => `<li><span>${esc(p.name)}</span><span>${fmtKg(p.prev)} to ${fmtKg(p.load)} kg</span></li>`).join('')}</ul>` : ''}
+    ${s.byEx.length > 1 ? `<h3 class="h3">Volume by exercise</h3>${barChart({ bars: s.byEx.map((x) => ({ key: x.name, label: x.name.replace(/^Example /, '').slice(0, 9), stack: [{ v: x.volume, name: x.name }] })), highlight: 'max', values: true, label: 'Volume by exercise' })}` : ''}
     ${f ? `<p class="fun">That is ${fmtNum(f.count, 1)} ${esc(f.count === 1 ? f.name : f.plural)}.</p><p class="fine">${esc(f.note)}</p>` : ''}`;
   openSheet(html, { title: 'Session complete' });
 }

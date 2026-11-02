@@ -2,6 +2,7 @@ import * as M from '../model.js';
 import { slotKey } from '../data.js';
 import { esc, fmtNum, fmtKg, fmtDate, fmtDow, parseDate, fmtMonth, today, addDays, daysBetween, isNum, num, haptic } from '../util.js';
 import { ringHTML, animateRings, openSheet, toast, ICON } from '../ui.js';
+import { barChart, progressBar } from '../charts.js';
 import { openCook } from '../cook.js';
 import { head, warningBlock, backupBanner, recapBlock } from './common.js';
 
@@ -46,6 +47,7 @@ export function renderToday(root, ctx) {
       ${ringHTML({ id: 'protein', value: e.protein ?? 0, target: C.proteinTarget, unit: 'g', label: 'Protein', dp: 1 })}
     </section>
     ${e.partial ? `<p class="fine warn-text">${ICON.warn} Some ticked items have no kcal or protein in cycle.json, so they are not counted.</p>` : ''}
+    ${prog.planned ? `<div class="dayprog">${progressBar(prog.done, prog.planned, { label: 'Planned items done today' })}<span>${prog.done} of ${prog.planned} done</span></div>` : ''}
     ${prog.complete ? `<p class="complete-line" data-complete>Day complete</p>`
       : next ? `<p class="nextup"><span class="nextup__label">Next up</span><span class="nextup__time">${esc(next.time ?? '')}</span><span>${esc(next.title ?? '')}</span></p>` : ''}
     <section class="timeline" aria-label="Plan for ${fmtDate(date, { dow: true, long: true })}">
@@ -53,11 +55,33 @@ export function renderToday(root, ctx) {
         : `<p class="quiet">${C.inCycle(date) ? 'Nothing planned for this day.' : 'This date is outside the cycle.'}</p>`}
       ${ses && !slots.some((s) => s.type === 'gym') ? `<button class="btn btn--line" data-act="train">Open ${ses.kind === 'run' ? 'run' : 'training'}</button>` : ''}
     </section>
+    ${weekBlock(date, C)}
     ${M.isRecapDay(date) && (prog.planned || M.logDates().length) ? recapBlock(M.weekRecap(date)) : ''}
   `;
   animateRings(root);
   if (justTicked) { root.querySelector(`[data-key="${CSS.escape(justTicked)}"]`)?.classList.add('just'); justTicked = null; }
   bind(root, ctx, slots);
+}
+
+// this week, Monday to Sunday: what you ate each day against the targets
+function weekBlock(date, C) {
+  const days = M.weekNutrition(date);
+  if (!days.some((d) => d.kcal != null)) return '';
+  const idx = days.findIndex((d) => d.date === date);
+  const bars = (key) => days.map((d) => ({ key: d.date, label: fmtDow(d.date, true).slice(0, 2), stack: [{ v: d[key] ?? 0, name: key }] }));
+  const logged = days.filter((d) => d.kcal != null);
+  const avgK = logged.reduce((a, d) => a + d.kcal, 0) / logged.length;
+  const avgP = logged.reduce((a, d) => a + d.protein, 0) / logged.length;
+  return `
+    <section class="panel week" aria-label="This week" data-chart="week">
+      <h2 class="h2">This week</h2>
+      <p class="sub">Average over ${logged.length} day${logged.length === 1 ? '' : 's'} with ticked meals: ${fmtNum(avgK)} kcal, ${fmtNum(avgP, 1)} g protein</p>
+      <div class="week__grid">
+        <figure><figcaption>Energy, kcal</figcaption>${barChart({ bars: bars('kcal'), highlight: idx, target: C.kcalTarget, height: 150, label: 'kcal per day this week' })}</figure>
+        <figure><figcaption>Protein, g</figcaption>${barChart({ bars: bars('protein'), highlight: idx, target: C.proteinTarget, height: 150, label: 'Protein per day this week' })}</figure>
+      </div>
+      <p class="fine">Dashed line: your daily target.</p>
+    </section>`;
 }
 
 function nextUp(date, slots, sp) {

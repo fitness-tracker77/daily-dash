@@ -2,10 +2,10 @@
 // so the app opens offline. Your cycle and history live in IndexedDB on the phone and are
 // never fetched or sent. Bump VERSION whenever app code changes (and APP_VERSION in js/app.js)
 // so installed copies pick up the new files.
-const VERSION = 'dash-shell-v4';
+const VERSION = 'dash-shell-v5';
 const SHELL = [
   './', 'index.html', 'manifest.json', 'css/app.css', 'data/cycle.example.json',
-  'fonts/cormorant-garamond-latin-500-normal.woff2', 'fonts/cormorant-garamond-latin-600-normal.woff2', 'fonts/hanken-grotesk-latin-wght-normal.woff2',
+  'fonts/hanken-grotesk-latin-wght-normal.woff2',
   'js/app.js', 'js/util.js', 'js/store.js', 'js/data.js', 'js/model.js', 'js/ui.js', 'js/charts.js', 'js/cook.js', 'js/rest.js', 'js/backup.js',
   'js/views/common.js', 'js/views/today.js', 'js/views/train.js', 'js/views/fuel.js', 'js/views/insights.js', 'js/views/log.js', 'js/views/settings.js',
   'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png',

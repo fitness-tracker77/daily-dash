@@ -239,7 +239,7 @@ export function remainingPlan() {
   });
 }
 
-// Days of stock left = stock in grams ÷ (planned grams over the remaining days ÷ number of remaining days)
+// Each pantry line: what you have now against what the rest of the cycle's plan needs (same unit)
 export function pantryBoard() {
   return cached('pantryBoard', () => {
     const plan = remainingPlan();
@@ -249,12 +249,10 @@ export function pantryBoard() {
       const planned = plan.need.get(line.item_id)?.grams || 0;
       row.plannedG = planned; row.remainingDays = plan.days;
       if (!planned || !plan.days) { row.noUse = true; return row; }
-      row.avgDaily = planned / plan.days;
-      const stockG = unitToGrams(line, row.quantity);
-      if (stockG == null) { row.noConversion = true; return row; }
-      row.stockG = stockG;
-      row.daysLeft = Math.max(0, stockG) / row.avgDaily;
-      row.runsOut = stockG < planned - 1e-9;
+      const need = gramsToUnit(line, planned);
+      if (need == null) { row.noConversion = true; return row; }
+      row.need = need;
+      row.short = isNum(row.quantity) && row.quantity < need - 1e-9;
       return row;
     });
   });
@@ -411,7 +409,9 @@ export function sessionSummary(date) {
   const vols = sets.map(volumeOf).filter(isNum);
   const sp = sessionProgress(date);
   const volume = vols.length ? sum(vols) : null;
-  return { volume, setsDone: sets.length, setsPlanned: sp?.planned ?? null, prs: prs().hits.filter((h) => h.date === date), fun: funLine(volume, date) };
+  const byEx = new Map();
+  for (const x of sets) { const v = volumeOf(x); if (v == null) continue; const e = byEx.get(x.ex) || { name: x.name, volume: 0 }; e.volume += v; byEx.set(x.ex, e); }
+  return { volume, setsDone: sets.length, setsPlanned: sp?.planned ?? null, prs: prs().hits.filter((h) => h.date === date), fun: funLine(volume, date), byEx: [...byEx.values()] };
 }
 
 // one comparison from fun_equivalents, rotating by date
@@ -692,6 +692,40 @@ export function nutritionIn(from, to) {
 export function runsByWeek(from, to) {
   return weeksIn(from, to).map((w) => { const r = rollup(`w:${w}`); return { week: w, km: r?.runKm || 0, runs: r?.runs || 0 }; });
 }
+export function setsByWeek(from, to) {
+  return weeksIn(from, to).map((w) => { const r = rollup(`w:${w}`); return { week: w, sets: r?.sets || 0, reps: r?.reps || 0 }; });
+}
+// share of planned items done per week (meals ticked + sets ticked + runs), from the day snapshots
+export function adherenceByWeek(from, to) {
+  const t = today();
+  return weeksIn(from, to).map((w) => {
+    let planned = 0, done = 0;
+    for (const d of dateRange(w, addDays(w, 6))) {
+      if (d > t || d < from) continue;
+      const p = progress(d);
+      planned += p.planned; done += p.done;
+    }
+    return { week: w, planned, done, pct: planned ? (done / planned) * 100 : null };
+  });
+}
+// average effort score per date (from the effort you gave each exercise)
+export function effortTrend(from, to) {
+  const by = new Map();
+  for (const r of store.values('exlog')) {
+    if (!isNum(r.effort) || r.date < from || r.date > to) continue;
+    const e = by.get(r.date) || []; e.push(r.effort); by.set(r.date, e);
+  }
+  return [...by.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([date, arr]) => ({ date, y: sum(arr) / arr.length, n: arr.length }));
+}
+// Monday to Sunday of the week containing date: eaten kcal and protein per day (null when no meal ticked)
+export function weekNutrition(date) {
+  const from = weekStart(date);
+  return dateRange(from, addDays(from, 6)).map((d) => { const r = rollup(`d:${d}`); return { date: d, kcal: r && r.meals ? r.kcal : null, protein: r && r.meals ? r.protein : null }; });
+}
+// heaviest set per session for the last n sessions of an exercise (sparkline)
+export function recentLoads(ex, n = 8) {
+  return exerciseDetail(exKey(ex)).days.filter((d) => d.maxLoad != null).slice(-n).map((d) => d.maxLoad);
+}
 export function dayStatus(date) {
   const r = rollup(`d:${date}`);
   const p = progress(date);
@@ -879,7 +913,7 @@ export function exportText(id = '7d') {
   nl();
   nl('== Pantry now ==');
   for (const r of pantryBoard()) {
-    nl(`${r.name}: ${isNum(r.quantity) ? fmtKg(r.quantity) : '?'} ${r.unit}, ${r.source ?? 'unknown'}${r.as_of ? ' ' + r.as_of : ''}${r.noUse ? ', no planned use' : r.noConversion ? ', days left need grams_per_unit' : `, ${fmtNum(r.daysLeft, 1)} days of stock left`}`);
+    nl(`${r.name}: ${isNum(r.quantity) ? fmtKg(r.quantity) : '?'} ${r.unit}, ${r.source ?? 'unknown'}${r.as_of ? ' ' + r.as_of : ''}${r.noUse ? ', no planned use' : r.noConversion ? ', needs grams_per_unit to compare' : `, rest of cycle needs ${fmtKg(r.need)} ${r.unit}`}`);
   }
   const sh = shoppingList();
   nl(sh.rows.length ? `Shopping: ${sh.rows.map((r) => (r.notInPantry ? `${r.name} ${fmtKg(r.grams)} g (not in pantry list)` : r.noConversion ? `${r.name} ${fmtKg(r.grams)} g (needs grams_per_unit)` : `${r.name} ${fmtKg(r.deficit)} ${r.unit} (based on ${r.basis})`)).join('; ')}` : 'Shopping: nothing short');

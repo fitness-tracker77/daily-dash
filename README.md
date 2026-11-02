@@ -6,10 +6,10 @@ Hosted on GitHub Pages; fonts are self-hosted, so the app never contacts another
 
 ## Screens
 
-- **Today**: date, cycle, day X of Y, streak; energy and protein rings from the grams you ticked; next up; the day's timeline. Tap to tick, long-press for detail, edit grams eaten, Cook mode.
+- **Today**: date, cycle, day X of Y, streak; energy and protein rings from the grams you ticked; progress and next up; the day's timeline; this week's energy and protein charts. Tap to tick, long-press for detail, edit grams eaten, Cook mode.
 - **Train**: today's session with "last" from your history, sets prefilled from your last logged set, PR badges, effort and notes, an automatic rest timer, exercise history with load and estimated-1RM charts, runs with pace.
-- **Fuel**: pantry with days of stock left, Recount and Bought, and a shopping list for the rest of the cycle.
-- **Insights**: weight lifted, weekly volume per muscle group, load and estimated 1RM, bodyweight against the target path, energy and protein, weekly run distance, a calendar of training and complete days, monthly review, badges, fun stats. A 2W / 1M / 3M / 6M / All switch applies to every chart.
+- **Fuel**: items to buy, pantry with what you have against what the rest of the plan needs, Recount and Bought, and a shopping list.
+- **Insights**: weight lifted, weekly volume per muscle group with a split donut, sets per week, load and estimated 1RM, effort, bodyweight against the target path, energy and protein, share of the plan done, weekly run distance, a calendar of training and complete days, monthly review, badges, fun stats. A 2W / 1M / 3M / 6M / All switch applies to every chart.
 - **Log**: everything you ticked or typed by date, with edit and delete; bodyweight; export for Claude.
 - **Settings** (gear): import or reset the cycle, rest timer, backup and restore, storage status, theme.
 
@@ -48,4 +48,4 @@ python3 -m http.server 8000   # then open http://localhost:8000
 
 `node tools/make-example.mjs` regenerates the example data.
 
-Fonts: Cormorant Garamond and Hanken Grotesk, SIL Open Font License (see `fonts/`).
+Font: Hanken Grotesk, SIL Open Font License (see `fonts/`).
