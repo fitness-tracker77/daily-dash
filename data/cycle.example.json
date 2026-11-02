@@ -1,7 +1,8 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "meta": {
     "example": true,
+    "priority_muscle": "back",
     "cycle_name": "EXAMPLE — not real data",
     "start_date": "2026-11-02",
     "end_date": "2026-11-15",
@@ -112,6 +113,12 @@
     {
       "date": "2026-11-03",
       "slots": [
+        {
+          "id": "run",
+          "time": "07:00",
+          "type": "gym",
+          "title": "Example easy run"
+        },
         {
           "id": "breakfast",
           "time": "07:30",
@@ -481,6 +488,12 @@
       "date": "2026-11-07",
       "slots": [
         {
+          "id": "run",
+          "time": "07:00",
+          "type": "gym",
+          "title": "Example easy run"
+        },
+        {
           "id": "breakfast",
           "time": "07:30",
           "type": "meal",
@@ -764,6 +777,12 @@
     {
       "date": "2026-11-10",
       "slots": [
+        {
+          "id": "run",
+          "time": "07:00",
+          "type": "gym",
+          "title": "Example easy run"
+        },
         {
           "id": "breakfast",
           "time": "07:30",
@@ -1133,6 +1152,12 @@
       "date": "2026-11-14",
       "slots": [
         {
+          "id": "run",
+          "time": "07:00",
+          "type": "gym",
+          "title": "Example easy run"
+        },
+        {
           "id": "breakfast",
           "time": "07:30",
           "type": "meal",
@@ -1347,47 +1372,64 @@
   },
   "sessions": {
     "2026-11-02": {
+      "kind": "lift",
       "title": "Example session A",
       "exercises": [
         {
           "name": "Example squat",
+          "muscle_group": "legs",
           "sets": 3,
           "reps": 5,
           "load_kg": 60,
+          "rest_seconds": 180,
           "notes": "Placeholder note"
         },
         {
           "name": "Example bench press",
+          "muscle_group": "chest",
           "sets": 3,
           "reps": 8,
-          "load_kg": 40
+          "load_kg": 40,
+          "rest_seconds": 120
         },
         {
           "name": "Example row",
+          "muscle_group": "back",
           "sets": 3,
           "reps": 10,
           "load_kg": 30
         }
       ]
     },
+    "2026-11-03": {
+      "kind": "run",
+      "title": "Example easy run",
+      "distance_km": 5,
+      "notes": "Placeholder: conversational pace."
+    },
     "2026-11-04": {
+      "kind": "lift",
       "title": "Example session B",
       "exercises": [
         {
           "name": "Example deadlift",
+          "muscle_group": "back",
           "sets": 3,
           "reps": 5,
           "load_kg": 80,
+          "rest_seconds": 180,
           "notes": "Placeholder note"
         },
         {
           "name": "Example overhead press",
+          "muscle_group": "shoulders",
           "sets": 3,
           "reps": 8,
           "load_kg": 25
         },
         {
           "name": "Example push-up",
+          "muscle_group": "chest",
           "sets": 2,
           "reps": 10,
           "load_kg": null,
@@ -1396,71 +1438,100 @@
       ]
     },
     "2026-11-06": {
+      "kind": "lift",
       "title": "Example session A",
       "exercises": [
         {
           "name": "Example squat",
+          "muscle_group": "legs",
           "sets": 3,
           "reps": 5,
           "load_kg": 60,
+          "rest_seconds": 180,
           "notes": "Placeholder note"
         },
         {
           "name": "Example bench press",
+          "muscle_group": "chest",
           "sets": 3,
           "reps": 8,
-          "load_kg": 40
+          "load_kg": 40,
+          "rest_seconds": 120
         },
         {
           "name": "Example row",
+          "muscle_group": "back",
           "sets": 3,
           "reps": 10,
           "load_kg": 30
         }
       ]
     },
+    "2026-11-07": {
+      "kind": "run",
+      "title": "Example easy run",
+      "distance_km": 8,
+      "notes": "Placeholder: conversational pace."
+    },
     "2026-11-09": {
+      "kind": "lift",
       "title": "Example session A",
       "exercises": [
         {
           "name": "Example squat",
+          "muscle_group": "legs",
           "sets": 3,
           "reps": 5,
           "load_kg": 65,
+          "rest_seconds": 180,
           "notes": "Placeholder note"
         },
         {
           "name": "Example bench press",
+          "muscle_group": "chest",
           "sets": 3,
           "reps": 8,
-          "load_kg": 42.5
+          "load_kg": 42.5,
+          "rest_seconds": 120
         },
         {
           "name": "Example row",
+          "muscle_group": "back",
           "sets": 3,
           "reps": 10,
           "load_kg": 30
         }
       ]
     },
+    "2026-11-10": {
+      "kind": "run",
+      "title": "Example easy run",
+      "distance_km": 5,
+      "notes": "Placeholder: conversational pace."
+    },
     "2026-11-11": {
+      "kind": "lift",
       "title": "Example session B",
       "exercises": [
         {
           "name": "Example deadlift",
+          "muscle_group": "back",
           "sets": 3,
           "reps": 5,
           "load_kg": 85,
+          "rest_seconds": 180,
           "notes": "Placeholder note"
         },
         {
           "name": "Example overhead press",
+          "muscle_group": "shoulders",
           "sets": 3,
           "reps": 8,
           "load_kg": 27.5
         },
         {
           "name": "Example push-up",
+          "muscle_group": "chest",
           "sets": 2,
           "reps": 10,
           "load_kg": null,
@@ -1469,28 +1540,40 @@
       ]
     },
     "2026-11-13": {
+      "kind": "lift",
       "title": "Example session A",
       "exercises": [
         {
           "name": "Example squat",
+          "muscle_group": "legs",
           "sets": 3,
           "reps": 5,
           "load_kg": 65,
+          "rest_seconds": 180,
           "notes": "Placeholder note"
         },
         {
           "name": "Example bench press",
+          "muscle_group": "chest",
           "sets": 3,
           "reps": 8,
-          "load_kg": 42.5
+          "load_kg": 42.5,
+          "rest_seconds": 120
         },
         {
           "name": "Example row",
+          "muscle_group": "back",
           "sets": 3,
           "reps": 10,
           "load_kg": 30
         }
       ]
+    },
+    "2026-11-14": {
+      "kind": "run",
+      "title": "Example easy run",
+      "distance_km": 8,
+      "notes": "Placeholder: conversational pace."
     }
   },
   "pantry": [

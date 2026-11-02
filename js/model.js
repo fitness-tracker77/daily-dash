@@ -1,20 +1,37 @@
-// All computations. Inputs are cycle.json (via Cycle) and what the user logged.
-// Rule: if an input number is missing, the result is null ("not logged" / "missing"),
-// never a guessed value.
+// All computations. Inputs are cycle.json (via Cycle) and what you logged (via store).
+// Rule: if an input number is missing, the result is null (shown as "not logged"),
+// never a guessed value. Estimates (estimated 1RM) are labelled "estimate" wherever shown.
 import * as store from './store.js';
-import { slotKey, exKey } from './data.js';
-import { isNum, today, addDays, dateRange, dow, sum, round1, isValidDate, fmtDate, fmtKg, fmtNum, fmtDow, daysBetween } from './util.js';
+import { slotKey, exKey, UNGROUPED } from './data.js';
+import {
+  isNum, today, addDays, addMonths, dateRange, dow, sum, round3, isValidDate, fmtKg, fmtNum, fmtDow,
+  daysBetween, weekStart, monthKey, monthStart, uid, fmtClock, fmtPace,
+} from './util.js';
 
 let C = null;
-export const setCycle = (c) => { C = c; };
+export const setCycle = (c) => { C = c; memo.clear(); };
 export const cycle = () => C;
-const S = () => store.get();
+
+// derived values are cached until the next change to logged data
+const memo = new Map();
+const cached = (k, fn) => { if (!memo.has(k)) memo.set(k, fn()); return memo.get(k); };
+const ROLLUP_SOURCES = new Set(['meals', 'sets', 'runs']);
+store.onChange((coll) => { memo.clear(); if (ROLLUP_SOURCES.has(coll)) markRollupsDirty(); });
 
 // ======================================================================
-// MEALS
+// SETTINGS
 // ======================================================================
+export const DEFAULT_SETTINGS = { theme: 'dark', autoRest: true, restDefault: 90 };
+export function settings() { return { ...DEFAULT_SETTINGS, ...(store.kv('settings') || {}) }; }
+export function setSetting(k, v) { store.setKv('settings', { ...(store.kv('settings') || {}), [k]: v }); }
+
+// ======================================================================
+// MEALS (and other tickable slots)
+// ======================================================================
+const tickKey = (date, slot) => `${date}|${slotKey(slot)}`;
+
 export function editedGrams(date, slot, idx) {
-  const v = S().grams?.[date]?.[slotKey(slot)]?.[idx];
+  const v = store.get('grams', tickKey(date, slot))?.g?.[idx];
   return isNum(v) ? v : null;
 }
 export function gramsFor(date, slot, idx) {
@@ -23,7 +40,7 @@ export function gramsFor(date, slot, idx) {
   const g = slot.items?.[idx]?.grams;
   return isNum(g) ? g : null;
 }
-// numbers for an item scaled to the grams actually eaten
+// an item's numbers scaled to the grams actually eaten: kcal × eaten / planned
 export function scaled(item, grams) {
   const ok = isNum(item?.grams) && item.grams > 0 && isNum(grams);
   return {
@@ -31,63 +48,89 @@ export function scaled(item, grams) {
     protein: ok && isNum(item.protein_g) ? item.protein_g * grams / item.grams : null,
   };
 }
-export function slotPlanned(slot) {
-  const items = Array.isArray(slot.items) ? slot.items : [];
-  const kc = items.map((i) => i?.kcal), pr = items.map((i) => i?.protein_g);
-  return {
-    kcal: items.length ? sum(kc.filter(isNum)) : null,
-    protein: items.length ? sum(pr.filter(isNum)) : null,
-    missing: kc.some((v) => !isNum(v)) || pr.some((v) => !isNum(v)),
-  };
-}
-export const tick = (date, slot) => S().ticks?.[date]?.[slotKey(slot)] || null;
+export const tick = (date, slot) => store.get('meals', tickKey(date, slot));
 
 export function setTick(date, slot, on) {
-  const st = S();
-  const key = slotKey(slot);
-  const prev = st.ticks?.[date]?.[key];
-  if (prev) { reversePantry(prev); delete st.ticks[date][key]; }
+  const key = tickKey(date, slot);
+  const prev = store.get('meals', key);
+  if (prev) { reversePantry(prev); store.del('meals', key); }
   if (on) {
-    const snap = { ts: Date.now(), type: slot.type, title: slot.title, time: slot.time, items: [], kcal: null, protein: null, partial: false, deducted: [] };
+    const snap = { key, date, slot: slotKey(slot), ts: Date.now(), type: slot.type, title: slot.title ?? null, time: slot.time ?? null, items: [], kcal: null, protein: null, partial: false, deducted: [] };
     if (slot.type === 'meal' && Array.isArray(slot.items)) {
       slot.items.forEach((it, i) => {
         const g = gramsFor(date, slot, i);
         const sc = scaled(it, g);
-        snap.items.push({ name: it?.name, item_id: it?.item_id ?? null, planned_g: isNum(it?.grams) ? it.grams : null, eaten_g: g, kcal: sc.kcal, protein: sc.protein });
+        snap.items.push({
+          name: it?.name ?? null, item_id: it?.item_id ?? null,
+          planned_g: isNum(it?.grams) ? it.grams : null, planned_kcal: isNum(it?.kcal) ? it.kcal : null, planned_protein: isNum(it?.protein_g) ? it.protein_g : null,
+          eaten_g: g, kcal: sc.kcal, protein: sc.protein,
+        });
       });
-      const k = snap.items.map((x) => x.kcal), p = snap.items.map((x) => x.protein);
-      snap.kcal = sum(k.filter(isNum));
-      snap.protein = sum(p.filter(isNum));
-      snap.partial = k.some((v) => v == null) || p.some((v) => v == null);
-      snap.deducted = deductPantry(date, snap.items);
+      totalSnap(snap);
+      snap.deducted = deductPantry(snap.items);
     }
-    store.bucket(st.ticks, date)[key] = snap;
+    store.put('meals', snap);
   }
-  updateSnap(date);
-  store.save();
+  progress(date);
+}
+function totalSnap(snap) {
+  const k = snap.items.map((x) => x.kcal), p = snap.items.map((x) => x.protein);
+  snap.kcal = sum(k.filter(isNum));
+  snap.protein = sum(p.filter(isNum));
+  snap.partial = k.some((v) => !isNum(v)) || p.some((v) => !isNum(v));
 }
 
 export function setGrams(date, slot, idx, grams) {
-  const b = store.bucket(S().grams, date, slotKey(slot));
-  if (isNum(grams) && grams >= 0) b[idx] = grams; else delete b[idx];
-  if (tick(date, slot)) setTick(date, slot, true); // re-apply with new grams
-  else store.save();
+  const key = tickKey(date, slot);
+  const cur = store.get('grams', key);
+  const g = { ...(cur?.g || {}) };
+  if (isNum(grams) && grams >= 0) g[idx] = grams; else delete g[idx];
+  if (Object.keys(g).length) store.put('grams', { key, date, slot: slotKey(slot), g });
+  else store.del('grams', key);
+  if (tick(date, slot)) setTick(date, slot, true); // re-apply with the new grams
 }
 
+// Log screen: change the grams of a ticked meal from its own record (works for any past cycle)
+export function editTickGrams(key, gramsByIdx) {
+  const rec = store.get('meals', key);
+  if (!rec || rec.type !== 'meal') return;
+  reversePantry(rec);
+  const snap = { ...rec, items: rec.items.map((it, i) => {
+    const g = isNum(gramsByIdx[i]) && gramsByIdx[i] >= 0 ? gramsByIdx[i] : it.eaten_g;
+    const per = (planned, eatenVal) => (isNum(planned) && isNum(it.planned_g) && it.planned_g > 0 ? planned * g / it.planned_g
+      : isNum(eatenVal) && isNum(it.eaten_g) && it.eaten_g > 0 ? eatenVal * g / it.eaten_g : null);
+    return { ...it, eaten_g: g, kcal: per(it.planned_kcal, it.kcal), protein: per(it.planned_protein, it.protein) };
+  }) };
+  totalSnap(snap);
+  snap.deducted = deductPantry(snap.items);
+  store.put('meals', snap);
+  const g = {}; snap.items.forEach((it, i) => { if (isNum(it.eaten_g) && it.eaten_g !== it.planned_g) g[i] = it.eaten_g; });
+  if (Object.keys(g).length) store.put('grams', { key, date: rec.date, slot: rec.slot, g }); else store.del('grams', key);
+  progress(rec.date);
+}
+export function deleteTick(key) {
+  const rec = store.get('meals', key);
+  if (!rec) return;
+  reversePantry(rec);
+  store.del('meals', key);
+  progress(rec.date);
+}
+
+const ticksByDate = () => cached('ticksByDate', () => {
+  const m = new Map();
+  for (const r of store.values('meals')) { if (!m.has(r.date)) m.set(r.date, []); m.get(r.date).push(r); }
+  return m;
+});
+export const ticksOn = (date) => ticksByDate().get(date) || [];
+
 export function eaten(date) {
-  const t = S().ticks?.[date] || {};
-  const meals = Object.values(t).filter((x) => x.type === 'meal');
+  const meals = ticksOn(date).filter((x) => x.type === 'meal');
   return {
-    kcal: meals.length ? sum(meals.map((m) => m.kcal).filter(isNum)) : 0,
-    protein: meals.length ? sum(meals.map((m) => m.protein).filter(isNum)) : 0,
+    kcal: meals.length ? sum(meals.map((m) => m.kcal).filter(isNum)) : null,
+    protein: meals.length ? sum(meals.map((m) => m.protein).filter(isNum)) : null,
     partial: meals.some((m) => m.partial),
     meals: meals.length,
   };
-}
-export function plannedDay(date) {
-  const meals = C.mealSlots(date);
-  const p = meals.map(slotPlanned);
-  return { kcal: meals.length ? sum(p.map((x) => x.kcal).filter(isNum)) : null, protein: meals.length ? sum(p.map((x) => x.protein).filter(isNum)) : null, missing: p.some((x) => x.missing) };
 }
 
 // ======================================================================
@@ -95,21 +138,20 @@ export function plannedDay(date) {
 // ======================================================================
 const lineSig = (l) => `${l.quantity}|${l.unit}|${l.source}|${l.as_of}|${l.grams_per_unit ?? ''}`;
 
+// a pantry line is (re)set from cycle.json when it first appears or when the file changes it
 export function syncPantry() {
-  const st = S();
   for (const l of C.pantry) {
     const sig = lineSig(l);
-    const cur = st.pantry[l.item_id];
+    const cur = store.get('pantry', l.item_id);
     if (!cur || cur.baseSig !== sig) {
-      st.pantry[l.item_id] = { quantity: l.quantity, source: l.source === 'counted' ? 'counted' : 'calculated', as_of: isValidDate(l.as_of) ? l.as_of : null, baseSig: sig };
+      store.put('pantry', { key: l.item_id, quantity: l.quantity, source: l.source === 'counted' ? 'counted' : 'calculated', as_of: isValidDate(l.as_of) ? l.as_of : null, baseSig: sig });
     }
   }
-  store.save();
 }
 export const pantryLine = (id) => C.pantry.find((l) => l.item_id === id) || null;
-export const pantryState = (id) => S().pantry[id] || null;
+export const pantryState = (id) => store.get('pantry', id);
 
-// converts grams into the pantry line's unit; null when no honest conversion exists
+// grams -> the line's unit; null when there is no honest conversion
 export function gramsToUnit(line, grams) {
   if (!isNum(grams)) return null;
   const u = String(line.unit).toLowerCase();
@@ -118,8 +160,16 @@ export function gramsToUnit(line, grams) {
   if (isNum(line.grams_per_unit) && line.grams_per_unit > 0) return grams / line.grams_per_unit;
   return null;
 }
+export function unitToGrams(line, qty) {
+  if (!isNum(qty)) return null;
+  const u = String(line.unit).toLowerCase();
+  if (u === 'g') return qty;
+  if (u === 'kg') return qty * 1000;
+  if (isNum(line.grams_per_unit) && line.grams_per_unit > 0) return qty * line.grams_per_unit;
+  return null;
+}
 
-function deductPantry(date, items) {
+function deductPantry(items) {
   const out = [];
   for (const it of items) {
     if (!it.item_id) continue;
@@ -127,9 +177,7 @@ function deductPantry(date, items) {
     if (!line || !cur) continue;
     const amt = gramsToUnit(line, it.eaten_g);
     if (amt == null) continue;
-    cur.quantity = round3(cur.quantity - amt);
-    cur.source = 'calculated';
-    cur.as_of = date;
+    store.put('pantry', { ...cur, quantity: round3(cur.quantity - amt), source: 'calculated', as_of: today() });
     out.push({ item_id: it.item_id, amount: amt, sig: cur.baseSig });
   }
   return out;
@@ -138,123 +186,171 @@ function reversePantry(snap) {
   for (const d of snap.deducted || []) {
     const cur = pantryState(d.item_id);
     if (!cur || cur.baseSig !== d.sig) continue; // a newer cycle.json count replaced this line
-    cur.quantity = round3(cur.quantity + d.amount);
-    cur.source = 'calculated';
+    store.put('pantry', { ...cur, quantity: round3(cur.quantity + d.amount), source: 'calculated', as_of: today() });
   }
 }
-const round3 = (v) => Math.round(v * 1000) / 1000;
 
 export function recount(id, qty) {
   const cur = pantryState(id); const line = pantryLine(id);
-  if (!cur || !isNum(qty)) return;
-  cur.quantity = qty; cur.source = 'counted'; cur.as_of = today();
-  S().pantryEvents.push({ date: today(), ts: Date.now(), item_id: id, name: line?.name, kind: 'recount', amount: qty, unit: line?.unit });
-  store.save();
+  if (!cur || !isNum(qty) || qty < 0) return false;
+  store.put('pantry', { ...cur, quantity: qty, source: 'counted', as_of: today() });
+  store.put('pantryEvents', { key: uid(), date: today(), ts: Date.now(), item_id: id, name: line?.name ?? id, kind: 'recount', amount: qty, unit: line?.unit ?? null, prev: cur.quantity, sig: cur.baseSig });
+  return true;
 }
 export function bought(id, qty) {
   const cur = pantryState(id); const line = pantryLine(id);
-  if (!cur || !isNum(qty)) return;
-  cur.quantity = round3(cur.quantity + qty); cur.source = 'calculated'; cur.as_of = today();
-  S().pantryEvents.push({ date: today(), ts: Date.now(), item_id: id, name: line?.name, kind: 'bought', amount: qty, unit: line?.unit });
-  store.save();
+  if (!cur || !isNum(qty) || qty <= 0) return false;
+  store.put('pantry', { ...cur, quantity: round3(cur.quantity + qty), source: 'calculated', as_of: today() });
+  store.put('pantryEvents', { key: uid(), date: today(), ts: Date.now(), item_id: id, name: line?.name ?? id, kind: 'bought', amount: qty, unit: line?.unit ?? null, sig: cur.baseSig });
+  return true;
+}
+// Deleting a purchase takes its amount back off. A recount cannot be undone (the old
+// number was replaced by a measurement), so deleting one only removes the log entry.
+export function deletePantryEvent(key) {
+  const ev = store.get('pantryEvents', key);
+  if (!ev) return;
+  if (ev.kind === 'bought') {
+    const cur = pantryState(ev.item_id);
+    if (cur && (!ev.sig || cur.baseSig === ev.sig)) store.put('pantry', { ...cur, quantity: round3(cur.quantity - ev.amount), source: 'calculated', as_of: today() });
+  }
+  store.del('pantryEvents', key);
+}
+export const pantryEvents = (id) => store.values('pantryEvents').filter((e) => !id || e.item_id === id).sort((a, b) => b.ts - a.ts);
+
+// planned grams per item from today (unticked meals only) to the end of the cycle
+export function remainingPlan() {
+  return cached('remainingPlan', () => {
+    const t = today();
+    const end = C.end || C.dates[C.dates.length - 1] || null;
+    const days = end && end >= t ? dateRange(t, end) : [];
+    const need = new Map(); const untracked = new Set();
+    for (const date of days) {
+      for (const slot of C.mealSlots(date)) {
+        if (date === t && tick(date, slot)) continue; // already eaten and subtracted
+        (slot.items || []).forEach((it) => {
+          if (!isNum(it?.grams)) return;
+          if (!it.item_id) { untracked.add(it.name); return; }
+          const n = need.get(it.item_id) || { name: it.name, grams: 0 };
+          n.grams += it.grams; need.set(it.item_id, n);
+        });
+      }
+    }
+    return { from: t, to: end, days: days.length, need, untracked: [...untracked] };
+  });
 }
 
-// remaining days of the cycle (from today), planned grams per item minus current pantry
+// Days of stock left = stock in grams ÷ (planned grams over the remaining days ÷ number of remaining days)
+export function pantryBoard() {
+  return cached('pantryBoard', () => {
+    const plan = remainingPlan();
+    return C.pantry.map((line) => {
+      const st = pantryState(line.item_id);
+      const row = { id: line.item_id, name: line.name ?? line.item_id, unit: line.unit, quantity: st?.quantity ?? null, source: st?.source ?? null, as_of: st?.as_of ?? null, line };
+      const planned = plan.need.get(line.item_id)?.grams || 0;
+      row.plannedG = planned; row.remainingDays = plan.days;
+      if (!planned || !plan.days) { row.noUse = true; return row; }
+      row.avgDaily = planned / plan.days;
+      const stockG = unitToGrams(line, row.quantity);
+      if (stockG == null) { row.noConversion = true; return row; }
+      row.stockG = stockG;
+      row.daysLeft = Math.max(0, stockG) / row.avgDaily;
+      row.runsOut = stockG < planned - 1e-9;
+      return row;
+    });
+  });
+}
+
 export function shoppingList() {
-  const t = today();
-  const end = C.end || C.dates[C.dates.length - 1];
-  const need = new Map(); // item_id -> { name, grams }
-  const untracked = new Set();
-  for (const date of C.dates) {
-    if (date < t || (end && date > end)) continue;
-    for (const slot of C.mealSlots(date)) {
-      if (date === t && tick(date, slot)) continue; // already eaten and subtracted
-      (slot.items || []).forEach((it) => {
-        if (!isNum(it?.grams)) return;
-        if (!it.item_id) { untracked.add(it.name); return; }
-        const n = need.get(it.item_id) || { name: it.name, grams: 0 };
-        n.grams += it.grams; need.set(it.item_id, n);
-      });
+  return cached('shopping', () => {
+    const plan = remainingPlan();
+    const rows = [];
+    for (const [id, n] of plan.need) {
+      const line = pantryLine(id); const cur = pantryState(id);
+      if (!line || !cur) { rows.push({ id, name: n.name, grams: n.grams, notInPantry: true }); continue; }
+      const needUnits = gramsToUnit(line, n.grams);
+      if (needUnits == null) { rows.push({ id, name: line.name, grams: n.grams, unit: line.unit, noConversion: true, basis: cur.source, as_of: cur.as_of }); continue; }
+      const deficit = needUnits - cur.quantity;
+      if (deficit > 1e-9) rows.push({ id, name: line.name, need: needUnits, have: cur.quantity, deficit, unit: line.unit, basis: cur.source, as_of: cur.as_of });
     }
-  }
-  const rows = [];
-  for (const [id, n] of need) {
-    const line = pantryLine(id); const cur = pantryState(id);
-    if (!line || !cur) { rows.push({ id, name: n.name, grams: n.grams, notInPantry: true }); continue; }
-    const needUnits = gramsToUnit(line, n.grams);
-    if (needUnits == null) { rows.push({ id, name: line.name, grams: n.grams, unit: line.unit, noConversion: true, basis: cur.source }); continue; }
-    const deficit = needUnits - cur.quantity;
-    if (deficit > 1e-9) rows.push({ id, name: line.name, need: needUnits, have: cur.quantity, deficit, unit: line.unit, basis: cur.source });
-  }
-  return { rows, untracked: [...untracked] };
+    return { rows, untracked: plan.untracked, days: plan.days, from: plan.from, to: plan.to };
+  });
 }
 
 // ======================================================================
 // TRAINING
 // ======================================================================
-export function setRec(date, ex, i) {
-  return S().sets?.[date]?.[exKey(ex)]?.sets?.[i] || null;
-}
-function setBucket(date, ex) {
-  const b = store.bucket(S().sets, date, exKey(ex));
-  b.name = ex.name;
-  b.sets = b.sets || {};
-  return b;
+export const setKeyOf = (date, ex, i) => `${date}|${exKey(ex)}|${i}`;
+export const setRec = (date, ex, i) => store.get('sets', setKeyOf(date, ex, i));
+const muscleFor = (ex) => ex.muscle ?? C?.muscleOf.get(exKey(ex)) ?? null;
+
+function baseSet(date, ex, i) {
+  return setRec(date, ex, i) || { key: setKeyOf(date, ex, i), date, ex: exKey(ex), name: ex.name, muscle: muscleFor(ex), idx: i, done: false, reps: null, load: null, ts: 0 };
 }
 export function setDraft(date, ex, i, field, value) {
-  const b = setBucket(date, ex);
-  const r = b.sets[i] || (b.sets[i] = { done: false });
-  if (value === '' || value == null || !isNum(value)) delete r[field]; else r[field] = value;
-  if (r.done) r.ts = r.ts || Date.now();
-  store.save();
+  const r = { ...baseSet(date, ex, i) };
+  r[field] = isNum(value) && value >= 0 ? value : null;
+  store.put('sets', r);
 }
-// tick/untick one set; reps & load = what was typed, else the planned numbers
-export function toggleSet(date, ex, i) {
-  const b = setBucket(date, ex);
-  const r = b.sets[i] || (b.sets[i] = { done: false });
+// tick/untick one set with the reps & kg shown in its boxes
+export function toggleSet(date, ex, i, typed = {}) {
+  const r = { ...baseSet(date, ex, i) };
   r.done = !r.done;
   if (r.done) {
-    if (!isNum(r.reps) && isNum(ex.reps)) r.reps = ex.reps;
-    if (!isNum(r.load) && isNum(ex.load_kg)) r.load = ex.load_kg;
+    const pf = prefill(date, ex, i);
+    r.reps = isNum(typed.reps) ? typed.reps : isNum(r.reps) ? r.reps : pf.reps;
+    r.load = isNum(typed.load) ? typed.load : isNum(r.load) ? r.load : pf.load;
+    r.muscle = muscleFor(ex);
+    r.name = ex.name;
     r.ts = Date.now();
   }
-  updateSnap(date);
-  store.save();
+  store.put('sets', r);
+  progress(date);
   return r.done;
 }
-
-// every set the user ticked, oldest first
-export function loggedSets() {
-  const out = [];
-  const all = S().sets || {};
-  for (const date of Object.keys(all).sort()) {
-    for (const [k, b] of Object.entries(all[date] || {})) {
-      for (const [i, r] of Object.entries(b?.sets || {})) {
-        if (!r?.done) continue;
-        out.push({ date, ex: k, name: b.name || k, idx: Number(i), reps: isNum(r.reps) ? r.reps : null, load: isNum(r.load) ? r.load : null, ts: r.ts || 0 });
-      }
-    }
+export function editSet(key, { reps, load }) {
+  const r = store.get('sets', key); if (!r) return;
+  store.put('sets', { ...r, reps: isNum(reps) && reps >= 0 ? reps : null, load: isNum(load) && load >= 0 ? load : null });
+}
+export function deleteSet(key) {
+  const r = store.get('sets', key); if (!r) return;
+  store.del('sets', key);
+  progress(r.date);
+}
+// sets logged with an older cycle (or migrated) get their muscle group once the cycle names it
+export function backfillMuscles() {
+  for (const r of store.values('sets')) {
+    if (r.muscle) continue;
+    const m = C.muscleOf.get(r.ex);
+    if (m) store.put('sets', { ...r, muscle: m });
   }
-  out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.ts - b.ts));
-  return out;
+}
+
+const normSet = (r) => ({ key: r.key, date: r.date, ex: r.ex, name: r.name || r.ex, muscle: r.muscle || UNGROUPED, idx: r.idx, reps: isNum(r.reps) ? r.reps : null, load: isNum(r.load) ? r.load : null, ts: r.ts || 0 });
+const sortSets = (arr) => arr.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.ts - b.ts || a.idx - b.idx));
+// every set you ticked, oldest first
+export function loggedSets() {
+  return cached('loggedSets', () => sortSets(store.values('sets').filter((r) => r.done).map(normSet)));
 }
 export const volumeOf = (s) => (isNum(s.reps) && isNum(s.load) && s.load > 0 ? s.reps * s.load : null);
+// Epley: load × (1 + reps / 30), only for sets of 1 to 10 reps. Always shown as an estimate.
+export const e1rm = (load, reps) => (isNum(load) && load > 0 && isNum(reps) && reps >= 1 && reps <= 10 ? load * (1 + reps / 30) : null);
 
-// PRs: a set beats the best load logged for that exercise on an EARLIER date.
-export function prs(sets = loggedSets()) {
+// PRs: a set's load beats the best load logged for that exercise on any EARLIER date.
+function computePrs(list) {
   const best = new Map(); const hits = []; const ids = new Set();
   let i = 0;
-  while (i < sets.length) {
-    const date = sets[i].date; const group = [];
-    while (i < sets.length && sets[i].date === date) group.push(sets[i++]);
-    const dayMax = new Map(); const seen = new Set();
+  while (i < list.length) {
+    const date = list[i].date; const group = [];
+    while (i < list.length && list[i].date === date) group.push(list[i++]);
+    const dayMax = new Map();
     for (const s of group) {
       if (!isNum(s.load) || s.load <= 0) continue;
       const prev = best.get(s.ex);
       if (prev != null && s.load > prev) {
-        ids.add(`${s.date}|${s.ex}|${s.idx}`);
-        if (!seen.has(s.ex)) { seen.add(s.ex); hits.push({ date, ex: s.ex, name: s.name, load: s.load, prev }); }
-        else { const h = hits.find((x) => x.date === date && x.ex === s.ex); if (s.load > h.load) h.load = s.load; }
+        ids.add(s.key);
+        const h = hits.find((x) => x.date === date && x.ex === s.ex);
+        if (!h) hits.push({ date, ex: s.ex, name: s.name, load: s.load, prev });
+        else if (s.load > h.load) h.load = s.load;
       }
       dayMax.set(s.ex, Math.max(dayMax.get(s.ex) ?? -Infinity, s.load));
     }
@@ -262,323 +358,535 @@ export function prs(sets = loggedSets()) {
   }
   return { hits, ids };
 }
+export const prs = () => cached('prs', () => computePrs(loggedSets()));
+
+const setsByEx = () => cached('setsByEx', () => {
+  const m = new Map();
+  for (const s of loggedSets()) { if (!m.has(s.ex)) m.set(s.ex, []); m.get(s.ex).push(s); }
+  return m;
+});
+// "last: X kg × R": the last set of that exercise logged on an earlier date
+export function lastLogged(date, ex) {
+  const list = setsByEx().get(exKey(ex)) || [];
+  for (let i = list.length - 1; i >= 0; i--) if (list[i].date < date) return list[i];
+  return null;
+}
+// reps/kg boxes: your most recent logged set of that exercise (earlier today included), else the plan
+export function prefill(date, ex, i) {
+  const key = setKeyOf(date, ex, i);
+  const list = setsByEx().get(exKey(ex)) || [];
+  for (let k = list.length - 1; k >= 0; k--) {
+    const s = list[k];
+    if (s.key === key || s.date > date) continue;
+    return { reps: s.reps ?? (isNum(ex.reps) ? ex.reps : null), load: s.load, from: 'history' };
+  }
+  return { reps: isNum(ex.reps) ? ex.reps : null, load: isNum(ex.load_kg) ? ex.load_kg : null, from: 'plan' };
+}
+
+// effort (1-10) and a note per exercise per date
+export const exLog = (date, ex) => store.get('exlog', `${date}|${exKey(ex)}`);
+export function setExLog(date, ex, patch) {
+  const key = `${date}|${exKey(ex)}`;
+  const cur = store.get('exlog', key) || { key, date, ex: exKey(ex), name: ex.name, effort: null, note: '' };
+  const next = { ...cur, ...patch, ts: Date.now() };
+  if (!isNum(next.effort) && !String(next.note || '').trim()) store.del('exlog', key);
+  else store.put('exlog', next);
+}
+export function deleteExLog(key) { store.del('exlog', key); }
 
 export function sessionProgress(date) {
   const ses = C.session(date);
   if (!ses) return null;
+  if (ses.kind === 'run') return { planned: 1, done: runRec(date) ? 1 : 0, kind: 'run' };
   let planned = 0, done = 0;
   for (const ex of ses.exercises) {
     planned += ex.sets;
     for (let i = 0; i < ex.sets; i++) if (setRec(date, ex, i)?.done) done++;
   }
-  return { planned, done };
+  return { planned, done, kind: 'lift' };
 }
 
 export function sessionSummary(date) {
   const sets = loggedSets().filter((s) => s.date === date);
   const vols = sets.map(volumeOf).filter(isNum);
   const sp = sessionProgress(date);
-  const pr = prs().hits.filter((h) => h.date === date);
-  return { volume: vols.length ? sum(vols) : null, setsDone: sp?.done ?? sets.length, setsPlanned: sp?.planned ?? null, prs: pr };
+  const volume = vols.length ? sum(vols) : null;
+  return { volume, setsDone: sets.length, setsPlanned: sp?.planned ?? null, prs: prs().hits.filter((h) => h.date === date), fun: funLine(volume, date) };
 }
 
-export function exerciseHistory(key) {
-  const byDate = new Map();
-  for (const s of loggedSets()) {
-    if (s.ex !== key || !isNum(s.load)) continue;
-    byDate.set(s.date, Math.max(byDate.get(s.date) ?? -Infinity, s.load));
-  }
-  return [...byDate].map(([date, load]) => ({ date, load }));
+// one comparison from fun_equivalents, rotating by date
+export function funLine(kg, date = today(), offset = 0) {
+  const list = C?.funEq;
+  if (!list || !list.length || !isNum(kg) || kg <= 0) return null;
+  const f = list[(Math.abs(daysBetween('2000-01-01', date)) + offset) % list.length];
+  return { ...f, count: kg / f.kg };
 }
 
-// ======================================================================
-// FUN STATS
-// ======================================================================
-export function funStats() {
-  const sets = loggedSets();
-  const inCycle = sets.filter((s) => C.inCycle(s.date));
-  const volSum = (arr) => { const v = arr.map(volumeOf).filter(isNum); return v.length ? sum(v) : null; };
-  const out = {
-    totalAll: volSum(sets),
-    totalCycle: volSum(inCycle),
-    setsCount: sets.length || null,
-    repsCount: sets.some((s) => isNum(s.reps)) ? sum(sets.map((s) => s.reps).filter(isNum)) : null,
-    sessions: new Set(sets.map((s) => s.date)).size || null,
-    heaviestSet: null, heaviestDay: null, mostTrained: null, biggestJump: null, heaviestLoad: null, bwPct: null,
-  };
-  for (const s of sets) {
-    const v = volumeOf(s);
-    if (v != null && (!out.heaviestSet || v > out.heaviestSet.volume)) out.heaviestSet = { volume: v, reps: s.reps, load: s.load, name: s.name, date: s.date };
-    if (isNum(s.load) && s.load > 0 && (!out.heaviestLoad || s.load > out.heaviestLoad.load)) out.heaviestLoad = { load: s.load, name: s.name, date: s.date };
-  }
-  const byDay = new Map();
-  for (const s of sets) { const v = volumeOf(s); if (v != null) byDay.set(s.date, (byDay.get(s.date) || 0) + v); }
-  for (const [date, v] of byDay) if (!out.heaviestDay || v > out.heaviestDay.volume) out.heaviestDay = { date, volume: v };
-  const counts = new Map();
-  for (const s of sets) { const c = counts.get(s.ex) || { name: s.name, n: 0 }; c.n++; counts.set(s.ex, c); }
-  for (const c of counts.values()) if (!out.mostTrained || c.n > out.mostTrained.n) out.mostTrained = c;
-  const firstLast = new Map();
-  for (const s of sets) {
-    if (!isNum(s.load) || s.load <= 0) continue;
-    const f = firstLast.get(s.ex);
-    if (!f) firstLast.set(s.ex, { name: s.name, first: s.load, firstDate: s.date, last: s.load, lastDate: s.date });
-    else {
-      // compare the heaviest set of the first logged day with the heaviest set of the latest day
-      if (s.date === f.firstDate) f.first = Math.max(f.first, s.load);
-      if (s.date === f.lastDate) f.last = Math.max(f.last, s.load);
-      else { f.last = s.load; f.lastDate = s.date; }
+export function exercisesLogged() {
+  return cached('exList', () => {
+    const m = new Map();
+    for (const s of loggedSets()) { const e = m.get(s.ex) || { ex: s.ex, name: s.name, sets: 0, last: s.date }; e.sets++; e.last = s.date; e.name = s.name; m.set(s.ex, e); }
+    return [...m.values()].sort((a, b) => (a.last < b.last ? 1 : a.last > b.last ? -1 : b.sets - a.sets));
+  });
+}
+
+// everything about one exercise, for its detail sheet
+export function exerciseDetail(key) {
+  return cached(`exd:${key}`, () => {
+    const list = setsByEx().get(key) || [];
+    const prIds = prs().ids;
+    const byDate = new Map();
+    for (const s of list) {
+      if (!byDate.has(s.date)) byDate.set(s.date, { date: s.date, sets: [], maxLoad: null, bestE1rm: null, pr: false });
+      const d = byDate.get(s.date);
+      const e = e1rm(s.load, s.reps);
+      d.sets.push({ ...s, pr: prIds.has(s.key), e1rm: e });
+      if (isNum(s.load) && s.load > 0) d.maxLoad = Math.max(d.maxLoad ?? -Infinity, s.load);
+      if (e != null) d.bestE1rm = Math.max(d.bestE1rm ?? -Infinity, e);
+      if (prIds.has(s.key)) d.pr = true;
     }
-  }
-  for (const f of firstLast.values()) {
-    if (f.firstDate === f.lastDate) continue; // needs two different days
-    const jump = f.last - f.first;
-    if (!out.biggestJump || jump > out.biggestJump.jump) out.biggestJump = { ...f, jump };
-  }
-  const bw = latestBodyweight();
-  if (bw && out.heaviestLoad) out.bwPct = { pct: out.heaviestLoad.load / bw.kg * 100, bw };
-  return out;
-}
-
-// 3 comparison lines, rotating daily (or by offset when tapped)
-export function equivalents(totalKg, offset = 0) {
-  const list = C.funEq;
-  if (!list || !list.length) return null;
-  const startIdx = (daysBetween('2000-01-01', today()) * 3 + offset) % list.length;
-  const n = Math.min(3, list.length);
-  const pick = Array.from({ length: n }, (_, k) => list[(startIdx + k) % list.length]);
-  return pick.map((f) => ({ ...f, count: isNum(totalKg) ? round1(totalKg / f.kg) : null }));
+    for (const d of byDate.values()) {
+      const xl = store.get('exlog', `${d.date}|${key}`);
+      d.effort = isNum(xl?.effort) ? xl.effort : null; d.note = xl?.note || '';
+    }
+    let best = null;
+    for (const s of list) {
+      if (!isNum(s.load) || s.load <= 0) continue;
+      if (!best || s.load > best.load || (s.load === best.load && (s.reps ?? 0) > (best.reps ?? 0))) best = s;
+    }
+    return { key, name: list[list.length - 1]?.name ?? key, days: [...byDate.values()], best, setCount: list.length };
+  });
 }
 
 // ======================================================================
-// DAY PROGRESS + STREAKS
+// RUNS
 // ======================================================================
-export function progress(date) {
-  if (C.day(date) || C.session(date)) {
-    const meals = C.mealSlots(date);
-    let planned = meals.length, done = meals.filter((s) => tick(date, s)).length;
-    const sp = sessionProgress(date);
-    if (sp) { planned += sp.planned; done += sp.done; }
-    const r = { planned, done, complete: planned > 0 && done >= planned };
-    S().daySnap[date] = r;
-    return r;
-  }
-  return S().daySnap[date] || { planned: 0, done: 0, complete: false };
+const runKey = (date) => `${date}|run`;
+export const runRec = (date) => store.get('runs', runKey(date));
+export function saveRun(date, { distance_km, time_s, notes }) {
+  store.put('runs', { key: runKey(date), date, distance_km: isNum(distance_km) && distance_km > 0 ? distance_km : null, time_s: isNum(time_s) && time_s > 0 ? time_s : null, notes: String(notes || ''), ts: Date.now() });
+  progress(date);
 }
-function updateSnap(date) { progress(date); }
-export function refreshSnaps() { for (const d of C.dates) if (d <= today()) progress(d); store.save(); }
-
-function knownDates() {
-  const set = new Set([...C.dates, ...Object.keys(S().daySnap)]);
-  for (const d of C.sessionMap.keys()) set.add(d);
-  return [...set].filter(isValidDate).sort();
-}
-
-export function streaks() {
-  const t = today();
-  const dates = knownDates().filter((d) => d <= t);
-  let run = 0, best = 0, bestEnd = null;
-  const runs = []; // date at which each run length was reached
-  for (const d of dates) {
-    const p = progress(d);
-    if (p.planned === 0) continue;
-    if (p.complete) { run++; runs.push({ date: d, run }); if (run > best) { best = run; bestEnd = d; } }
-    else if (d !== t) run = 0;
-  }
-  let current = 0;
-  for (let i = dates.length - 1; i >= 0; i--) {
-    const d = dates[i]; const p = progress(d);
-    if (p.planned === 0) continue;
-    if (p.complete) current++;
-    else if (d === t) continue; // today still in progress
-    else break;
-  }
-  const completedThisCycle = C.dates.filter((d) => d <= t && progress(d).complete).length;
-  return { current, best, bestEnd, completedThisCycle, runs };
-}
+export function deleteRun(key) { const r = store.get('runs', key); if (!r) return; store.del('runs', key); progress(r.date); }
+export const paceOf = (r) => (isNum(r?.distance_km) && r.distance_km > 0 && isNum(r?.time_s) ? r.time_s / r.distance_km : null);
 
 // ======================================================================
 // BODYWEIGHT
 // ======================================================================
 export function addBodyweight(date, kg) {
-  const st = S();
-  st.bodyweight = (st.bodyweight || []).filter((b) => b.date !== date);
-  if (isNum(kg) && kg > 0) st.bodyweight.push({ date, kg, ts: Date.now() });
-  st.bodyweight.sort((a, b) => (a.date < b.date ? -1 : 1));
-  store.save();
+  if (!isValidDate(date) || !isNum(kg) || kg <= 0) return false;
+  store.put('bodyweight', { key: date, date, kg, ts: Date.now() });
+  return true;
 }
-export const bodyweights = () => (S().bodyweight || []).filter((b) => isValidDate(b.date) && isNum(b.kg));
+export function deleteBodyweight(key) { store.del('bodyweight', key); }
+export const bodyweights = () => cached('bw', () => store.values('bodyweight').filter((b) => isValidDate(b.date) && isNum(b.kg)).sort((a, b) => (a.date < b.date ? -1 : 1)));
 export function latestBodyweight() { const b = bodyweights(); return b.length ? b[b.length - 1] : null; }
-export function targetLine() {
-  const m = C.meta;
-  if (!C.start || !C.end || !isNum(m.bodyweight_start_kg) || !isNum(m.bodyweight_target_kg)) return null;
+// straight path from bodyweight_start_kg on start_date to bodyweight_target_kg on end_date
+export function targetPath() {
+  if (!C.start || !C.end || C.bwStart == null || C.bwTarget == null) return null;
   const span = daysBetween(C.start, C.end);
   return {
-    start: C.start, end: C.end, from: m.bodyweight_start_kg, to: m.bodyweight_target_kg,
+    start: C.start, end: C.end, from: C.bwStart, to: C.bwTarget,
     at(date) {
       if (date < C.start || date > C.end) return null;
-      if (span <= 0) return m.bodyweight_start_kg;
-      return m.bodyweight_start_kg + (m.bodyweight_target_kg - m.bodyweight_start_kg) * daysBetween(C.start, date) / span;
+      return span <= 0 ? C.bwStart : C.bwStart + (C.bwTarget - C.bwStart) * daysBetween(C.start, date) / span;
     },
+  };
+}
+export function vsPath(entry) {
+  const p = targetPath(); const line = p?.at(entry.date);
+  if (line == null) return null;
+  const diff = entry.kg - line;
+  return { line, diff, side: Math.abs(diff) < 0.05 ? 'on' : diff > 0 ? 'above' : 'below' };
+}
+
+// ======================================================================
+// DAY PROGRESS + STREAKS
+// ======================================================================
+// complete = every meal slot ticked and every set (or the run) of that date's session done
+export function progress(date) {
+  if (C && (C.day(date) || C.session(date))) {
+    const meals = C.mealSlots(date);
+    let planned = meals.length, done = meals.filter((s) => tick(date, s)).length;
+    const sp = sessionProgress(date);
+    if (sp) { planned += sp.planned; done += sp.done; }
+    const r = { planned, done, complete: planned > 0 && done >= planned };
+    const cur = store.get('days', date);
+    if (date <= today() && (!cur || cur.planned !== r.planned || cur.done !== r.done || cur.complete !== r.complete)) store.put('days', { key: date, ...r });
+    return r;
+  }
+  const s = store.get('days', date);
+  return s ? { planned: s.planned, done: s.done, complete: !!s.complete } : { planned: 0, done: 0, complete: false };
+}
+export function refreshSnaps() { for (const d of C.dates) if (d <= today()) progress(d); }
+
+function knownDates() {
+  const set = new Set([...C.dates, ...store.all('days').keys()]);
+  for (const d of C.sessionMap.keys()) set.add(d);
+  return [...set].filter(isValidDate).sort();
+}
+export function streaks() {
+  return cached('streaks', () => {
+    const t = today();
+    const dates = knownDates().filter((d) => d <= t);
+    let run = 0, best = 0;
+    const runs = [];
+    for (const d of dates) {
+      const p = progress(d);
+      if (p.planned === 0) continue; // nothing planned: neither adds nor breaks
+      if (p.complete) { run++; runs.push({ date: d, run }); best = Math.max(best, run); }
+      else if (d !== t) run = 0;
+    }
+    let current = 0;
+    for (let i = dates.length - 1; i >= 0; i--) {
+      const d = dates[i]; const p = progress(d);
+      if (p.planned === 0) continue;
+      if (p.complete) current++;
+      else if (d === t) continue; // today still in progress
+      else break;
+    }
+    return { current, best, runs, completeDays: runs.length };
+  });
+}
+
+// ======================================================================
+// LOGGED DATES (anything you ticked or typed)
+// ======================================================================
+export function logDates() {
+  return cached('logDates', () => {
+    const s = new Set();
+    for (const r of store.values('meals')) s.add(r.date);
+    for (const r of store.values('sets')) if (r.done) s.add(r.date);
+    for (const r of store.values('exlog')) s.add(r.date);
+    for (const r of store.values('runs')) s.add(r.date);
+    for (const r of store.values('bodyweight')) s.add(r.date);
+    for (const r of store.values('pantryEvents')) s.add(r.date);
+    return [...s].filter(isValidDate).sort();
+  });
+}
+export const firstLogDate = () => logDates()[0] || null;
+
+export function entriesFor(date) {
+  const sets = sortSets(store.values('sets').filter((r) => r.date === date && r.done).map(normSet));
+  const byEx = new Map();
+  for (const s of sets) { if (!byEx.has(s.ex)) byEx.set(s.ex, { ex: s.ex, name: s.name, sets: [] }); byEx.get(s.ex).sets.push(s); }
+  return {
+    ticks: ticksOn(date).slice().sort((a, b) => String(a.time).localeCompare(String(b.time))),
+    exercises: [...byEx.values()],
+    exlogs: store.values('exlog').filter((r) => r.date === date),
+    run: runRec(date),
+    bodyweight: store.get('bodyweight', date),
+    pantry: store.values('pantryEvents').filter((r) => r.date === date).sort((a, b) => a.ts - b.ts),
   };
 }
 
 // ======================================================================
-// BADGES (earned dates are kept once earned)
+// ROLLUPS: per day (d:), week (w:, Monday) and month (m:), rebuilt from the raw logs
+// ======================================================================
+export const ROLLUP_VERSION = 1;
+let rollupsDirty = true;
+let rebuildTimer = null;
+function markRollupsDirty() {
+  rollupsDirty = true;
+  if (store.kv('rollupsDirty') !== true) store.setKv('rollupsDirty', true); // survives a crash before the rebuild
+  clearTimeout(rebuildTimer);
+  rebuildTimer = setTimeout(() => { if (rollupsDirty) rollups(); }, 400);
+}
+export function initRollups() {
+  rollupsDirty = store.kv('rollupsVersion') !== ROLLUP_VERSION || store.kv('rollupsDirty') !== false;
+}
+
+const blankAgg = (key, kind, start) => ({ key, kind, start, volume: 0, muscle: {}, sets: 0, reps: 0, kcal: 0, protein: 0, meals: 0, mealDays: 0, sessions: 0, runs: 0, runKm: 0, runSec: 0, prs: 0 });
+const r3 = (o) => { for (const k of ['volume', 'kcal', 'protein', 'runKm']) o[k] = round3(o[k]); for (const g of Object.keys(o.muscle)) o.muscle[g] = round3(o.muscle[g]); return o; };
+
+// Pure: raw records in, rollup records out (sorted by key). Builds the stored rollups and verifies them.
+export function computeRollups({ sets = [], meals = [], runs = [] }) {
+  const days = new Map();
+  const day = (date) => { if (!days.has(date)) days.set(date, blankAgg(`d:${date}`, 'd', date)); return days.get(date); };
+  const done = sortSets(sets.filter((r) => r.done && isValidDate(r.date)).map(normSet));
+  for (const s of done) {
+    const d = day(s.date); d.sets++;
+    if (isNum(s.reps)) d.reps += s.reps;
+    const v = volumeOf(s);
+    if (v != null) { d.volume += v; d.muscle[s.muscle] = (d.muscle[s.muscle] || 0) + v; }
+  }
+  for (const h of computePrs(done).hits) day(h.date).prs++;
+  for (const m of meals) {
+    if (m.type !== 'meal' || !isValidDate(m.date)) continue;
+    const d = day(m.date); d.meals++;
+    if (isNum(m.kcal)) d.kcal += m.kcal;
+    if (isNum(m.protein)) d.protein += m.protein;
+  }
+  for (const r of runs) {
+    if (!isValidDate(r.date)) continue;
+    const d = day(r.date); d.runs++;
+    if (isNum(r.distance_km)) d.runKm += r.distance_km;
+    if (isNum(r.time_s)) d.runSec += r.time_s;
+  }
+  const groups = new Map();
+  const add = (key, kind, start, d) => {
+    if (!groups.has(key)) groups.set(key, blankAgg(key, kind, start));
+    const g = groups.get(key);
+    for (const k of ['volume', 'sets', 'reps', 'kcal', 'protein', 'meals', 'runs', 'runKm', 'runSec', 'prs']) g[k] += d[k];
+    for (const [m, v] of Object.entries(d.muscle)) g.muscle[m] = (g.muscle[m] || 0) + v;
+    if (d.meals > 0) g.mealDays++;
+    if (d.sets > 0) g.sessions++;
+  };
+  for (const d of [...days.values()].sort((a, b) => (a.start < b.start ? -1 : 1))) {
+    d.mealDays = d.meals > 0 ? 1 : 0; d.sessions = d.sets > 0 ? 1 : 0;
+    const ws = weekStart(d.start), mk = monthKey(d.start);
+    add(`w:${ws}`, 'w', ws, d);
+    add(`m:${mk}`, 'm', monthStart(mk), d);
+  }
+  return [...days.values(), ...groups.values()].map(r3).sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+}
+
+export function rollups() {
+  if (rollupsDirty) {
+    const recs = computeRollups({ sets: store.values('sets'), meals: store.values('meals'), runs: store.values('runs') });
+    store.replaceAll('rollups', recs);
+    rollupsDirty = false;
+    if (store.kv('rollupsVersion') !== ROLLUP_VERSION) store.setKv('rollupsVersion', ROLLUP_VERSION);
+    if (store.kv('rollupsDirty') !== false) store.setKv('rollupsDirty', false);
+  }
+  return store.all('rollups');
+}
+export const rollup = (key) => rollups().get(key) || null;
+
+// ======================================================================
+// INSIGHTS
+// ======================================================================
+export const RANGES = ['2W', '1M', '3M', '6M', 'All'];
+export function rangeBounds(id) {
+  const to = today();
+  let from;
+  if (id === '2W') from = addDays(to, -13);
+  else if (id === '1M') from = addDays(addMonths(to, -1), 1);
+  else if (id === '3M') from = addDays(addMonths(to, -3), 1);
+  else if (id === '6M') from = addDays(addMonths(to, -6), 1);
+  else from = firstLogDate() && firstLogDate() < to ? firstLogDate() : to;
+  return { id, from, to };
+}
+const daysIn = (from, to) => [...rollups().values()].filter((r) => r.kind === 'd' && r.start >= from && r.start <= to).sort((a, b) => (a.start < b.start ? -1 : 1));
+
+export function liftedIn(from, to) {
+  const d = daysIn(from, to).filter((r) => r.sets > 0);
+  return d.length ? { volume: sum(d.map((r) => r.volume)), sets: sum(d.map((r) => r.sets)), sessions: d.length, prs: sum(d.map((r) => r.prs)) } : null;
+}
+export function weeksIn(from, to) {
+  const out = [];
+  for (let w = weekStart(from); w <= to; w = addDays(w, 7)) out.push(w);
+  return out;
+}
+export function weeklyMuscle(from, to) {
+  const weeks = weeksIn(from, to).map((w) => ({ week: w, r: rollup(`w:${w}`) }));
+  const totals = new Map();
+  for (const { r } of weeks) for (const [m, v] of Object.entries(r?.muscle || {})) totals.set(m, (totals.get(m) || 0) + v);
+  const groups = [...totals.entries()].sort((a, b) => b[1] - a[1]).map(([m]) => m);
+  return { weeks: weeks.map(({ week, r }) => ({ week, muscle: r?.muscle || {}, volume: r?.volume || 0, sets: r?.sets || 0 })), groups, totals, priority: C.priorityMuscle };
+}
+export const exerciseTrend = (key, from, to) => exerciseDetail(key).days.filter((d) => d.date >= from && d.date <= to);
+export function nutritionIn(from, to) {
+  return daysIn(from, to).filter((r) => r.meals > 0).map((r) => ({ date: r.start, kcal: r.kcal, protein: r.protein }));
+}
+export function runsByWeek(from, to) {
+  return weeksIn(from, to).map((w) => { const r = rollup(`w:${w}`); return { week: w, km: r?.runKm || 0, runs: r?.runs || 0 }; });
+}
+export function dayStatus(date) {
+  const r = rollup(`d:${date}`);
+  const p = progress(date);
+  return { trained: !!r && (r.sets > 0 || r.runs > 0), complete: p.complete, planned: p.planned > 0 };
+}
+
+export function monthReview(mk) {
+  const r = rollup(`m:${mk}`);
+  const bw = bodyweights().filter((b) => monthKey(b.date) === mk);
+  const runs = store.values('runs').filter((x) => monthKey(x.date) === mk);
+  return {
+    month: mk,
+    sessions: r && r.sessions > 0 ? r.sessions : null,
+    volume: r && r.sets > 0 ? r.volume : null,
+    prs: r && r.sets > 0 ? r.prs : null,
+    bwChange: bw.length >= 2 ? { from: bw[0], to: bw[bw.length - 1], diff: bw[bw.length - 1].kg - bw[0].kg } : null,
+    bwCount: bw.length,
+    kcalAvg: r && r.mealDays ? r.kcal / r.mealDays : null,
+    proteinAvg: r && r.mealDays ? r.protein / r.mealDays : null,
+    mealDays: r?.mealDays || 0,
+    runs: runs.length ? { count: runs.length, km: sum(runs.map((x) => x.distance_km).filter(isNum)), withDistance: runs.filter((x) => isNum(x.distance_km)).length } : null,
+  };
+}
+export function monthsWithData() {
+  const s = new Set(logDates().map(monthKey)); s.add(monthKey(today()));
+  return [...s].sort().reverse();
+}
+
+export function funStats() {
+  return cached('fun', () => {
+    const sets = loggedSets();
+    const vols = sets.map(volumeOf).filter(isNum);
+    const out = {
+      total: vols.length ? sum(vols) : null,
+      setsCount: sets.length || null,
+      repsCount: sets.some((s) => isNum(s.reps)) ? sum(sets.map((s) => s.reps).filter(isNum)) : null,
+      heaviestSet: null, heaviestDay: null, mostTrained: null, biggestJump: null,
+    };
+    for (const s of sets) {
+      const v = volumeOf(s);
+      if (v != null && (!out.heaviestSet || v > out.heaviestSet.volume)) out.heaviestSet = { volume: v, reps: s.reps, load: s.load, name: s.name, date: s.date };
+    }
+    for (const r of rollups().values()) if (r.kind === 'd' && r.volume > 0 && (!out.heaviestDay || r.volume > out.heaviestDay.volume)) out.heaviestDay = { date: r.start, volume: r.volume };
+    const counts = new Map();
+    for (const s of sets) { const c = counts.get(s.ex) || { name: s.name, n: 0 }; c.n++; counts.set(s.ex, c); }
+    for (const c of counts.values()) if (!out.mostTrained || c.n > out.mostTrained.n) out.mostTrained = c;
+    // biggest load jump: heaviest set on the first logged day vs heaviest set on the latest day, per exercise
+    const fl = new Map();
+    for (const s of sets) {
+      if (!isNum(s.load) || s.load <= 0) continue;
+      const f = fl.get(s.ex);
+      if (!f) fl.set(s.ex, { name: s.name, first: s.load, firstDate: s.date, last: s.load, lastDate: s.date });
+      else if (s.date === f.firstDate) { f.first = Math.max(f.first, s.load); f.last = f.first; }
+      else if (s.date === f.lastDate) f.last = Math.max(f.last, s.load);
+      else { f.last = s.load; f.lastDate = s.date; }
+    }
+    for (const f of fl.values()) {
+      if (f.firstDate === f.lastDate) continue;
+      const jump = f.last - f.first;
+      if (!out.biggestJump || jump > out.biggestJump.jump) out.biggestJump = { ...f, jump };
+    }
+    return out;
+  });
+}
+
+// ======================================================================
+// BADGES (each keeps the date it was earned)
 // ======================================================================
 export const BADGES = [
   { id: 'first_complete', label: 'First complete day' },
   { id: 'streak7', label: '7-day streak' },
   { id: 'first_pr', label: 'First PR' },
-  { id: 'sessions10', label: '10 sessions logged' },
-  { id: 'kg1000', label: '1,000 kg lifted' },
-  { id: 'bw_above3', label: '3 weigh-ins above the line' },
+  { id: 'sessions10', label: '10 sessions' },
+  { id: 'kg1000', label: 'First 1,000 kg lifted' },
+  { id: 'days30', label: '30 logged days' },
 ];
 export function updateBadges() {
-  const st = S(); const b = st.badges; const before = JSON.stringify(b);
+  const b = { ...(store.kv('badges') || {}) }; const before = JSON.stringify(b);
   const sk = streaks();
-  const firstC = sk.runs[0]; if (firstC && !b.first_complete) b.first_complete = firstC.date;
+  if (sk.runs[0] && !b.first_complete) b.first_complete = sk.runs[0].date;
   const r7 = sk.runs.find((r) => r.run >= 7); if (r7 && !b.streak7) b.streak7 = r7.date;
   const sets = loggedSets();
-  const p = prs(sets).hits; if (p.length && !b.first_pr) b.first_pr = p[0].date;
-  const sessionDates = [...new Set(sets.map((s) => s.date))];
-  if (sessionDates.length >= 10 && !b.sessions10) b.sessions10 = sessionDates[9];
+  const p = prs().hits; if (p.length && !b.first_pr) b.first_pr = p[0].date;
+  const sessions = [...new Set([...sets.map((s) => `${s.date}|lift`), ...store.values('runs').map((r) => `${r.date}|run`)])].sort();
+  if (sessions.length >= 10 && !b.sessions10) b.sessions10 = sessions[9].split('|')[0];
   let cum = 0;
   for (const s of sets) { const v = volumeOf(s); if (v != null) { cum += v; if (cum >= 1000 && !b.kg1000) { b.kg1000 = s.date; break; } } }
-  const tl = targetLine();
-  if (tl && !b.bw_above3) {
-    let n = 0;
-    for (const e of bodyweights()) {
-      const line = tl.at(e.date);
-      if (line == null) { n = 0; continue; }
-      n = e.kg > line ? n + 1 : 0;
-      if (n >= 3) { b.bw_above3 = e.date; break; }
-    }
-  }
-  if (JSON.stringify(b) !== before) store.save();
+  const ld = logDates(); if (ld.length >= 30 && !b.days30) b.days30 = ld[29];
+  if (JSON.stringify(b) !== before) store.setKv('badges', b);
   return BADGES.map((x) => ({ ...x, date: b[x.id] || null }));
 }
 
 // ======================================================================
-// WEEKLY RECAP (shows on Sundays and on the last cycle day)
+// SUNDAY RECAP (last day of each week, Monday to Sunday)
 // ======================================================================
-export function isRecapDay(date) {
-  if (!C.inCycle(date) || !C.day(date) && !C.session(date)) return false;
-  return dow(date) === 0 || date === C.end;
-}
+export const isRecapDay = (date) => dow(date) === 0;
 export function weekRecap(date) {
-  const offset = (dow(date) + 6) % 7; // days since Monday
-  const monday = addDays(date, -offset);
-  const days = dateRange(monday, date).filter((d) => C.inCycle(d));
+  const from = weekStart(date);
+  const days = dateRange(from, date);
   const plannedDays = days.filter((d) => progress(d).planned > 0);
-  const completed = plannedDays.filter((d) => progress(d).complete).length;
-  const mealDays = days.map((d) => eaten(d)).filter((e) => e.meals > 0);
-  const sets = loggedSets().filter((s) => days.includes(s.date));
-  const vols = sets.map(volumeOf).filter(isNum);
-  const prHits = prs().hits.filter((h) => days.includes(h.date));
+  const r = rollup(`w:${from}`);
   return {
-    from: monday, to: date,
-    completed, plannedDays: plannedDays.length,
-    kcalAvg: mealDays.length ? sum(mealDays.map((e) => e.kcal)) / mealDays.length : null,
-    proteinAvg: mealDays.length ? sum(mealDays.map((e) => e.protein)) / mealDays.length : null,
-    mealDays: mealDays.length,
-    sessions: sets.length ? new Set(sets.map((s) => s.date)).size : null,
-    lifted: vols.length ? sum(vols) : null,
-    prs: sets.length ? prHits.length : null,
+    from, to: date,
+    completed: plannedDays.filter((d) => progress(d).complete).length, plannedDays: plannedDays.length,
+    kcalAvg: r && r.mealDays ? r.kcal / r.mealDays : null,
+    proteinAvg: r && r.mealDays ? r.protein / r.mealDays : null,
+    mealDays: r?.mealDays || 0,
+    sessions: r ? r.sessions + r.runs : null,
+    volume: r && r.sets > 0 ? r.volume : null,
+    prs: r && r.sets > 0 ? r.prs : null,
   };
 }
 
 // ======================================================================
-// CELEBRATIONS (each fires once per date)
+// CELEBRATIONS (once per date)
 // ======================================================================
 export function celebrateOnce(date, kind) {
-  const c = store.bucket(S().celebrated, date);
-  if (c[kind]) return false;
-  c[kind] = true; store.save(); return true;
+  const c = { ...(store.kv('celebrated') || {}) };
+  const d = { ...(c[date] || {}) };
+  if (d[kind]) return false;
+  d[kind] = true; c[date] = d;
+  store.setKv('celebrated', c);
+  return true;
 }
 
 // ======================================================================
-// EXPORT
+// BACKUP REMINDER: hidden with nothing logged; neutral up to 7 days, warm after 7
 // ======================================================================
-export function exportText() {
-  const st = S(); const L = [];
-  const nl = (s = '') => L.push(s);
-  nl(`Export — ${fmtDate(today(), { year: true })}`);
+export function backupStatus(now = today()) {
+  const first = firstLogDate();
+  if (!first) return null;
+  const last = store.kv('lastBackup');
+  const lastDate = typeof last === 'string' && isValidDate(last.slice(0, 10)) ? last.slice(0, 10) : null;
+  const days = Math.max(0, daysBetween(lastDate || first, now));
+  return { never: !lastDate, days, warm: days > 7, lastDate, first };
+}
+
+// ======================================================================
+// EXPORT FOR CLAUDE (plain text)
+// ======================================================================
+export const EXPORT_RANGES = [['7d', 'Last 7 days'], ['cycle', 'This cycle'], ['30d', 'Last 30 days']];
+export function exportRange(id) {
+  const t = today();
+  if (id === 'cycle' && C.start && C.end) return { from: C.start, to: C.end < t ? C.end : t };
+  if (id === '30d') return { from: addDays(t, -29), to: t };
+  return { from: addDays(t, -6), to: t };
+}
+export function exportText(id = '7d') {
+  const { from, to } = exportRange(id);
+  const L = []; const nl = (s = '') => L.push(s);
+  const NL = 'not logged';
+  nl(`Daily Dash export, ${EXPORT_RANGES.find((r) => r[0] === id)?.[1] ?? id}: ${from} to ${to}`);
   nl(`Cycle: ${C.name ?? 'meta.cycle_name missing'}${C.start && C.end ? ` (${C.start} to ${C.end})` : ''}`);
+  nl(`Targets: ${C.kcalTarget != null ? fmtNum(C.kcalTarget) + ' kcal' : 'kcal target missing'}, ${C.proteinTarget != null ? fmtNum(C.proteinTarget) + ' g protein' : 'protein target missing'}`);
   nl();
-  const dates = [...new Set([...C.dates.filter((d) => d <= today()), ...Object.keys(st.ticks), ...Object.keys(st.sets)])].sort();
-  nl('== Days: planned vs actually eaten ==');
-  for (const d of dates) {
-    const slots = C.slots(d).filter((s) => s.type === 'meal');
-    const ticks = st.ticks[d] || {};
-    const sp = C.day(d) || C.session(d) ? progress(d) : st.daySnap[d];
-    nl(`${d} ${fmtDow(d, true)}${sp ? ` — ${sp.done}/${sp.planned} planned items done${sp.complete ? ' (complete)' : ''}` : ''}`);
+  const prIds = prs().ids;
+  for (const d of dateRange(from, to)) {
+    const p = progress(d);
+    nl(`== ${d} ${fmtDow(d, true)}${p.planned ? ` (${p.done}/${p.planned} planned items done${p.complete ? ', complete' : ''})` : ''} ==`);
     const seen = new Set();
-    for (const s of slots) {
-      const k = slotKey(s); seen.add(k);
-      const t = ticks[k];
-      const planned = (s.items || []).map((i) => `${i.name} ${isNum(i.grams) ? i.grams + ' g' : '? g'}`).join(', ');
-      nl(`  ${s.time} ${s.title}`);
-      nl(`    planned: ${planned || '—'}`);
-      nl(`    eaten:   ${t ? t.items.map((i) => `${i.name} ${isNum(i.eaten_g) ? fmtKg(i.eaten_g) + ' g' : '? g'}`).join(', ') : 'not ticked'}`);
+    for (const s of C.mealSlots(d)) {
+      const t = tick(d, s); seen.add(tickKey(d, s));
+      nl(`${s.time ?? ''} ${s.title ?? 'meal'}`);
+      nl(`  planned: ${(s.items || []).map((i) => `${i?.name} ${isNum(i?.grams) ? fmtKg(i.grams) + ' g' : '? g'}`).join(', ') || 'none'}`);
+      nl(`  eaten:   ${t ? t.items.map((i) => `${i.name} ${isNum(i.eaten_g) ? fmtKg(i.eaten_g) + ' g' : '? g'}`).join(', ') : 'not ticked'}`);
     }
-    for (const [k, t] of Object.entries(ticks)) {
-      if (seen.has(k)) continue;
-      nl(`  ${t.time || ''} ${t.title} [${t.type}] — done${t.type === 'meal' ? `: ${t.items.map((i) => `${i.name} ${fmtKg(i.eaten_g)} g`).join(', ')}` : ''}`);
+    for (const t of ticksOn(d)) {
+      if (seen.has(t.key)) continue;
+      nl(`${t.time ?? ''} ${t.title ?? t.type} [${t.type}] done${t.type === 'meal' ? `: ${t.items.map((i) => `${i.name} ${fmtKg(i.eaten_g)} g`).join(', ')}` : ''}`);
     }
     const e = eaten(d);
-    if (e.meals) nl(`  eaten total: ${fmtNum(e.kcal)} kcal, ${fmtNum(e.protein, 1)} g protein${e.partial ? ' (some items had no numbers)' : ''}`);
-  }
-  nl();
-  nl('== Training sessions (sets ticked) ==');
-  const sets = loggedSets(); const prIds = prs(sets).ids;
-  const byDate = new Map();
-  for (const s of sets) { if (!byDate.has(s.date)) byDate.set(s.date, []); byDate.get(s.date).push(s); }
-  if (!byDate.size) nl('not logged');
-  for (const [d, arr] of byDate) {
-    nl(`${d}`);
-    const byEx = new Map();
-    for (const s of arr) { if (!byEx.has(s.name)) byEx.set(s.name, []); byEx.get(s.name).push(s); }
-    for (const [name, list] of byEx) {
-      nl(`  ${name}: ${list.sort((a, b) => a.idx - b.idx).map((s) => `${s.reps ?? '?'} x ${s.load != null ? fmtKg(s.load) + ' kg' : 'no load'}${prIds.has(`${s.date}|${s.ex}|${s.idx}`) ? ' (PR)' : ''}`).join(', ')}`);
+    nl(`  eaten total: ${e.meals ? `${fmtNum(e.kcal)} kcal, ${fmtNum(e.protein, 1)} g protein${e.partial ? ' (some items had no numbers)' : ''}` : NL}`);
+    const ent = entriesFor(d);
+    for (const x of ent.exercises) {
+      const xl = store.get('exlog', `${d}|${x.ex}`);
+      nl(`  ${x.name}: ${x.sets.map((s) => `${s.reps ?? '?'} x ${s.load != null ? fmtKg(s.load) + ' kg' : 'no load'}${prIds.has(s.key) ? ' (PR)' : ''}`).join(', ')}${isNum(xl?.effort) ? `; effort ${xl.effort}/10` : ''}${xl?.note ? `; note: ${xl.note}` : ''}`);
     }
-    const v = arr.map(volumeOf).filter(isNum);
-    nl(`  volume: ${v.length ? fmtNum(sum(v), 1) + ' kg' : 'not logged'}`);
+    for (const xl of ent.exlogs) if (!ent.exercises.some((x) => x.ex === xl.ex)) nl(`  ${xl.name}: no sets ticked${isNum(xl.effort) ? `; effort ${xl.effort}/10` : ''}${xl.note ? `; note: ${xl.note}` : ''}`);
+    const vol = rollup(`d:${d}`);
+    if (vol?.sets) nl(`  training volume: ${fmtNum(vol.volume, 1)} kg`);
+    if (ent.run) nl(`  run: ${isNum(ent.run.distance_km) ? fmtKg(ent.run.distance_km) + ' km' : 'distance not logged'}, ${isNum(ent.run.time_s) ? fmtClock(ent.run.time_s) : 'time not logged'}${paceOf(ent.run) ? `, pace ${fmtPace(paceOf(ent.run))}` : ''}${ent.run.notes ? `; notes: ${ent.run.notes}` : ''}`);
+    if (ent.bodyweight) { const v = vsPath(ent.bodyweight); nl(`  bodyweight: ${fmtKg(ent.bodyweight.kg)} kg${v ? ` (${v.side} target path ${fmtNum(v.line, 1)} kg)` : ''}`); }
+    for (const pe of ent.pantry) nl(`  pantry ${pe.kind}: ${pe.name} ${fmtKg(pe.amount)} ${pe.unit ?? ''}`);
   }
   nl();
-  nl('== Bodyweight ==');
-  const bw = bodyweights(); const tl = targetLine();
-  if (!bw.length) nl('not logged');
-  for (const b of bw) {
-    const line = tl?.at(b.date);
-    nl(`${b.date}: ${fmtKg(b.kg)} kg${line != null ? ` (${b.kg > line ? 'above' : b.kg < line ? 'below' : 'on'} target line ${fmtNum(line, 1)} kg)` : ''}`);
+  nl('== Pantry now ==');
+  for (const r of pantryBoard()) {
+    nl(`${r.name}: ${isNum(r.quantity) ? fmtKg(r.quantity) : '?'} ${r.unit}, ${r.source ?? 'unknown'}${r.as_of ? ' ' + r.as_of : ''}${r.noUse ? ', no planned use' : r.noConversion ? ', days left need grams_per_unit' : `, ${fmtNum(r.daysLeft, 1)} days of stock left`}`);
   }
-  nl();
-  nl('== Pantry ==');
-  for (const l of C.pantry) {
-    const cur = pantryState(l.item_id);
-    if (!cur) continue;
-    nl(`${l.name}: ${fmtNum(cur.quantity, Number.isInteger(cur.quantity) ? 0 : 1)} ${l.unit} — ${cur.source}${cur.as_of ? ' ' + cur.as_of : ''}`);
-  }
-  nl();
-  nl('== Fun stats ==');
-  const f = funStats();
-  const nlg = (label, v) => nl(`${label}: ${v ?? 'not logged'}`);
-  nlg('Total lifted (this cycle)', f.totalCycle != null ? fmtNum(f.totalCycle, 1) + ' kg' : null);
-  nlg('Total lifted (all time)', f.totalAll != null ? fmtNum(f.totalAll, 1) + ' kg' : null);
-  const eq = equivalents(f.totalAll);
-  if (eq && f.totalAll != null) eq.forEach((e) => nl(`  = ${fmtNum(e.count, 1)} ${e.plural} (${e.note})`));
-  nlg('Heaviest single set', f.heaviestSet && `${f.heaviestSet.reps} x ${fmtKg(f.heaviestSet.load)} kg = ${fmtNum(f.heaviestSet.volume, 1)} kg (${f.heaviestSet.name}, ${f.heaviestSet.date})`);
-  nlg('Heaviest day', f.heaviestDay && `${fmtNum(f.heaviestDay.volume, 1)} kg on ${f.heaviestDay.date}`);
-  nlg('Total sets', f.setsCount); nlg('Total reps', f.repsCount); nlg('Sessions logged', f.sessions);
-  nlg('Most-trained exercise', f.mostTrained && `${f.mostTrained.name} (${f.mostTrained.n} sets)`);
-  nlg('Biggest load jump', f.biggestJump && `${f.biggestJump.name}: from ${fmtKg(f.biggestJump.first)} kg to ${fmtKg(f.biggestJump.last)} kg`);
-  nlg('Heaviest load vs bodyweight', f.bwPct && `${fmtNum(f.bwPct.pct, 0)}% (${fmtKg(f.heaviestLoad.load)} kg vs ${fmtKg(f.bwPct.bw.kg)} kg)`);
+  const sh = shoppingList();
+  nl(sh.rows.length ? `Shopping: ${sh.rows.map((r) => (r.notInPantry ? `${r.name} ${fmtKg(r.grams)} g (not in pantry list)` : r.noConversion ? `${r.name} ${fmtKg(r.grams)} g (needs grams_per_unit)` : `${r.name} ${fmtKg(r.deficit)} ${r.unit} (based on ${r.basis})`)).join('; ')}` : 'Shopping: nothing short');
   nl();
   const sk = streaks();
   nl('== Streaks ==');
-  nl(`Current streak: ${sk.current} days`);
-  nl(`Best streak: ${sk.best} days`);
-  nl(`Completed days this cycle: ${sk.completedThisCycle}`);
+  nl(`Current streak: ${sk.current} days. Best: ${sk.best} days. Complete days: ${sk.completeDays}.`);
   const badges = updateBadges().filter((b) => b.date);
   nl(`Badges: ${badges.length ? badges.map((b) => `${b.label} (${b.date})`).join(', ') : 'none yet'}`);
   return L.join('\n');

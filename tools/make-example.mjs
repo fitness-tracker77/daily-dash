@@ -32,6 +32,7 @@ const dinner = { id: 'dinner', time: '19:30', type: 'meal', title: 'Example lent
   items: [item('ex_lentils', 80), item('ex_eggs', 100), item('ex_pb', 20)] };
 const note = { id: 'note', time: '10:00', type: 'note', title: 'Example note: placeholder reminder text' };
 const gym = { id: 'gym', time: '17:30', type: 'gym', title: 'Example session' };
+const run = { id: 'run', time: '07:00', type: 'gym', title: 'Example easy run' };
 const cook = { id: 'cook', time: '15:00', type: 'cook', title: 'Example batch cook: lentil stew', recipe_id: 'ex_stew',
   notes: 'Placeholder: makes the dinners for the next few days.' };
 const freezer = { id: 'freezer', time: '21:00', type: 'freezer', title: 'Example: move 2 stew portions to the freezer' };
@@ -43,36 +44,43 @@ const sessions = {};
 for (let i = 0; i < 14; i++) {
   const d = new Date(start.getTime() + i * 86400000);
   const date = iso(d);
-  const dow = d.getUTCDay(); // 1 Mon, 3 Wed, 5 Fri
+  const dow = d.getUTCDay(); // 1 Mon, 3 Wed, 5 Fri lifting; 2 Tue, 6 Sat running
   const gymDay = dow === 1 || dow === 3 || dow === 5;
+  const runDay = dow === 2 || dow === 6;
   const slots = gymDay
     ? [breakfast, note, lunch, gym, dinner]
+    : runDay ? [run, breakfast, lunch, dinner]
     : dow === 0 ? [breakfast, lunch, cook, dinner, freezer]
     : [breakfast, lunch, dinner];
   days.push({ date, slots: structuredClone(slots) });
+  const week = Math.floor(i / 7);
   if (gymDay) {
-    const week = Math.floor(i / 7);
     sessions[date] = {
+      kind: 'lift',
       title: dow === 3 ? 'Example session B' : 'Example session A',
       exercises: dow === 3
         ? [
-            { name: 'Example deadlift', sets: 3, reps: 5, load_kg: 80 + week * 5, notes: 'Placeholder note' },
-            { name: 'Example overhead press', sets: 3, reps: 8, load_kg: 25 + week * 2.5 },
-            { name: 'Example push-up', sets: 2, reps: 10, load_kg: null, notes: 'Bodyweight: no load logged' },
+            { name: 'Example deadlift', muscle_group: 'back', sets: 3, reps: 5, load_kg: 80 + week * 5, rest_seconds: 180, notes: 'Placeholder note' },
+            { name: 'Example overhead press', muscle_group: 'shoulders', sets: 3, reps: 8, load_kg: 25 + week * 2.5 },
+            { name: 'Example push-up', muscle_group: 'chest', sets: 2, reps: 10, load_kg: null, notes: 'Bodyweight: no load logged' },
           ]
         : [
-            { name: 'Example squat', sets: 3, reps: 5, load_kg: 60 + week * 5, notes: 'Placeholder note' },
-            { name: 'Example bench press', sets: 3, reps: 8, load_kg: 40 + week * 2.5 },
-            { name: 'Example row', sets: 3, reps: 10, load_kg: 30 },
+            { name: 'Example squat', muscle_group: 'legs', sets: 3, reps: 5, load_kg: 60 + week * 5, rest_seconds: 180, notes: 'Placeholder note' },
+            { name: 'Example bench press', muscle_group: 'chest', sets: 3, reps: 8, load_kg: 40 + week * 2.5, rest_seconds: 120 },
+            { name: 'Example row', muscle_group: 'back', sets: 3, reps: 10, load_kg: 30 },
           ],
     };
+  }
+  if (runDay) {
+    sessions[date] = { kind: 'run', title: 'Example easy run', distance_km: dow === 2 ? 5 : 8, notes: 'Placeholder: conversational pace.' };
   }
 }
 
 const cycle = {
-  schema_version: 1,
+  schema_version: 2,
   meta: {
     example: true,
+    priority_muscle: 'back',
     cycle_name: 'EXAMPLE — not real data',
     start_date: iso(start),
     end_date: days[days.length - 1].date,

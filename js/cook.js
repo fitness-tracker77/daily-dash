@@ -33,25 +33,39 @@ export function openCook(recipe) {
     const t = timerOf(i);
     el.innerHTML = `
       <header class="cook__head">
-        <div><p class="cook__recipe">${esc(recipe.title)}</p><p class="cook__count">Step <span class="num">${i + 1}</span> of <span class="num">${steps.length}</span></p></div>
+        <div><p class="cook__recipe">${esc(recipe.title)}</p><p class="cook__count">Step ${i + 1} of ${steps.length}</p></div>
         <button class="icon-btn icon-btn--lg" data-act="close" aria-label="Close cook mode">${ICON.close}</button>
       </header>
       <div class="cook__bar"><span style="width:${((i + 1) / steps.length) * 100}%"></span></div>
       <main class="cook__body">
         <p class="cook__text">${esc(st.text)}</p>
         ${t ? `<button class="cook__timer${t.endAt ? ' is-running' : ''}${t.fired ? ' is-done' : ''}" data-act="timer" aria-live="polite">
-            ${ICON.timer}<span class="num" data-time>${fmtClock(leftOf(t))}</span>
+            <span class="cook__clock" data-time>${fmtClock(leftOf(t))}</span>
             <small>${t.fired ? 'Done — tap to reset' : t.endAt ? 'Tap to pause' : t.left < t.total ? 'Tap to resume' : 'Start timer'}</small>
           </button>` : ''}
-        ${st.doneness_test ? `<aside class="cook__test"><strong>Doneness test</strong><p>${esc(st.doneness_test)}</p></aside>` : ''}
+        ${st.doneness_test ? `<aside class="cook__test doneness"><strong>Doneness test</strong><p>${esc(st.doneness_test)}</p></aside>` : ''}
       </main>
       <footer class="cook__nav">
-        <button class="btn btn--ghost btn--lg" data-act="prev" ${i === 0 ? 'disabled' : ''}>${ICON.left} Previous</button>
-        ${i < steps.length - 1 ? `<button class="btn btn--accent btn--lg" data-act="next">Next ${ICON.right}</button>` : `<button class="btn btn--green btn--lg" data-act="close">Finish</button>`}
+        <button class="btn btn--line btn--lg" data-act="prev" ${i === 0 ? 'disabled' : ''}>Previous</button>
+        ${i < steps.length - 1 ? `<button class="btn btn--gold btn--lg" data-act="next">Next step</button>` : `<button class="btn btn--gold btn--lg" data-act="close">Finish</button>`}
       </footer>`;
   }
 
-  const tickIv = setInterval(() => {
+  // Wake exactly when a running timer's displayed second changes (or it ends),
+  // instead of polling: the display never lags and nothing runs while idle.
+  let tickT = null;
+  function schedule() {
+    clearTimeout(tickT); tickT = null;
+    const now = Date.now();
+    let next = Infinity;
+    for (const t of timers.values()) {
+      if (!t.endAt) continue;
+      const ms = t.endAt - now;
+      next = Math.min(next, ms <= 0 ? 0 : (ms % 1000 || 1000));
+    }
+    if (next !== Infinity) tickT = setTimeout(tick, next);
+  }
+  function tick() {
     for (const [k, t] of timers) {
       if (t.endAt && !t.fired && Date.now() >= t.endAt) {
         t.fired = true; t.endAt = null; t.left = 0;
@@ -63,10 +77,15 @@ export function openCook(recipe) {
     const t = timers.get(i);
     const node = el.querySelector('[data-time]');
     if (t && node) node.textContent = fmtClock(leftOf(t));
-  }, 250);
+    schedule();
+  }
+  // Background tabs throttle timeouts: catch up as soon as the app is visible again.
+  const onShow = () => { if (document.visibilityState === 'visible') tick(); };
+  document.addEventListener('visibilitychange', onShow);
 
   function close() {
-    clearInterval(tickIv);
+    clearTimeout(tickT);
+    document.removeEventListener('visibilitychange', onShow);
     document.removeEventListener('visibilitychange', onVis);
     try { wakeLock?.release(); } catch { /* already released */ }
     wakeLock = null;
@@ -86,8 +105,8 @@ export function openCook(recipe) {
       const t = timerOf(i);
       if (t.fired) { t.fired = false; t.left = t.total; t.endAt = null; }
       else if (t.endAt) { t.left = leftOf(t); t.endAt = null; }
-      else { t.endAt = Date.now() + t.left * 1000; }
-      haptic(10); render();
+      else { t.endAt = Date.now() + Math.round(t.left * 1000); } // whole ms, so second boundaries are exact
+      haptic(10); render(); schedule();
     }
   });
   let sx = null;

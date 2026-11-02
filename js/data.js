@@ -4,6 +4,8 @@ import { isNum, isValidDate, slug } from './util.js';
 import { readImported } from './store.js';
 
 export const SLOT_TYPES = ['meal', 'gym', 'cook', 'freezer', 'note'];
+export const SESSION_KINDS = ['lift', 'run'];
+export const UNGROUPED = 'ungrouped';
 
 // Imported cycle (stored on the phone) if there is one, otherwise the built-in example.
 // data/cycle.json is never fetched from the network.
@@ -35,6 +37,9 @@ export function checkImport(text) {
   let cycle;
   try { cycle = JSON.parse(t); } catch (e) { return { ok: false, error: `This is not valid JSON: ${e.message}. Nothing was imported. Copy the whole file and paste again.` }; }
   if (!cycle || typeof cycle !== 'object' || Array.isArray(cycle)) return { ok: false, error: 'The pasted JSON must be an object starting with {. Nothing was imported.' };
+  if (cycle.schema_version != null && cycle.schema_version !== 1 && cycle.schema_version !== 2) {
+    return { ok: false, error: `schema_version ${JSON.stringify(cycle.schema_version)} is not supported (use 2, or 1 for older files). Nothing was imported.` };
+  }
   return { ok: true, cycle, text: t, warnings: validate(cycle) };
 }
 
@@ -46,7 +51,9 @@ export function validate(c) {
 
   const m = c.meta;
   need(m && typeof m === 'object', 'meta', 'Missing. Cycle name, dates and targets cannot be shown.');
+  need(c.schema_version === 2 || c.schema_version === 1, 'schema_version', c.schema_version == null ? 'Missing. Read as version 2.' : 'Must be 2 (or 1 for older files).');
   if (m && typeof m === 'object') {
+    if ('priority_muscle' in m) need(typeof m.priority_muscle === 'string' && m.priority_muscle, 'meta.priority_muscle', 'Not a text value. No muscle group is highlighted.');
     need(typeof m.cycle_name === 'string' && m.cycle_name, 'meta.cycle_name', 'Missing.');
     need(isValidDate(m.start_date), 'meta.start_date', 'Missing or not a YYYY-MM-DD date. Day X of Y and the target line are hidden.');
     need(isValidDate(m.end_date), 'meta.end_date', 'Missing or not a YYYY-MM-DD date. Day X of Y and the target line are hidden.');
@@ -105,6 +112,13 @@ export function validate(c) {
     if (ok) Object.entries(c.sessions).forEach(([date, s]) => {
       const p = `sessions.${date}`;
       need(isValidDate(date), p, 'Key is not a YYYY-MM-DD date. Session skipped.');
+      const kind = s?.kind ?? 'lift';
+      need(SESSION_KINDS.includes(kind), `${p}.kind`, 'Must be "lift" or "run". Session skipped.');
+      if (kind === 'run') {
+        if (s?.distance_km != null) need(isNum(s.distance_km) && s.distance_km > 0, `${p}.distance_km`, 'Not a positive number. No planned distance is shown.');
+        if (s?.notes != null) need(typeof s.notes === 'string', `${p}.notes`, 'Not text.');
+        return;
+      }
       need(Array.isArray(s?.exercises), `${p}.exercises`, 'Missing or not a list.');
       (Array.isArray(s?.exercises) ? s.exercises : []).forEach((e, k) => {
         const ep = `${p}.exercises[${k}]`;
@@ -112,6 +126,8 @@ export function validate(c) {
         need(Number.isInteger(e?.sets) && e.sets > 0, `${ep}.sets`, 'Missing or not a whole number. Exercise skipped.');
         need(Number.isInteger(e?.reps) && e.reps > 0, `${ep}.reps`, 'Missing or not a whole number.');
         if (e?.load_kg != null) need(isNum(e.load_kg), `${ep}.load_kg`, 'Not a number (use null for no load).');
+        need(typeof e?.muscle_group === 'string' && e.muscle_group.trim(), `${ep}.muscle_group`, 'Missing. This exercise is grouped as "ungrouped" in muscle charts.');
+        if (e?.rest_seconds != null) need(isNum(e.rest_seconds) && e.rest_seconds > 0, `${ep}.rest_seconds`, 'Not a positive number. The default rest from Settings is used.');
       });
     });
   }
@@ -155,7 +171,13 @@ export class Cycle {
     });
     this.dates = [...this.dayMap.keys()].sort();
     const ses = this.raw.sessions && typeof this.raw.sessions === 'object' ? this.raw.sessions : {};
-    this.sessionMap = new Map(Object.entries(ses).filter(([d, s]) => isValidDate(d) && Array.isArray(s?.exercises)));
+    this.sessionMap = new Map(Object.entries(ses).filter(([d, s]) => isValidDate(d) && s && typeof s === 'object'
+      && ((s.kind ?? 'lift') === 'run' || Array.isArray(s.exercises))));
+    // exercise key -> muscle group, from every session in the file
+    this.muscleOf = new Map();
+    for (const s of this.sessionMap.values()) for (const e of Array.isArray(s.exercises) ? s.exercises : []) {
+      if (typeof e?.name === 'string' && typeof e.muscle_group === 'string' && e.muscle_group.trim()) this.muscleOf.set(exKey(e), e.muscle_group.trim().toLowerCase());
+    }
     this.recipes = this.raw.recipes && typeof this.raw.recipes === 'object' ? this.raw.recipes : {};
     this.pantry = (Array.isArray(this.raw.pantry) ? this.raw.pantry : [])
       .filter((x) => typeof x?.item_id === 'string' && isNum(x?.quantity) && typeof x?.unit === 'string');
@@ -169,6 +191,9 @@ export class Cycle {
   get kcalTarget() { return isNum(this.meta.daily_kcal_target) ? this.meta.daily_kcal_target : null; }
   get proteinTarget() { return isNum(this.meta.daily_protein_target_g) ? this.meta.daily_protein_target_g : null; }
   get isExample() { return this.meta.example === true; }
+  get priorityMuscle() { return typeof this.meta.priority_muscle === 'string' && this.meta.priority_muscle.trim() ? this.meta.priority_muscle.trim().toLowerCase() : null; }
+  get bwStart() { return isNum(this.meta.bodyweight_start_kg) ? this.meta.bodyweight_start_kg : null; }
+  get bwTarget() { return isNum(this.meta.bodyweight_target_kg) ? this.meta.bodyweight_target_kg : null; }
   inCycle(date) { return this.start && this.end ? date >= this.start && date <= this.end : this.dayMap.has(date); }
   day(date) { return this.dayMap.get(date) || null; }
   slots(date) {
@@ -180,8 +205,13 @@ export class Cycle {
   session(date) {
     const s = this.sessionMap.get(date);
     if (!s) return null;
-    const exercises = s.exercises.filter((e) => typeof e?.name === 'string' && Number.isInteger(e?.sets) && e.sets > 0);
-    return exercises.length ? { ...s, exercises } : null;
+    const kind = s.kind ?? 'lift';
+    if (kind === 'run') return { ...s, kind: 'run', exercises: [], distance_km: isNum(s.distance_km) && s.distance_km > 0 ? s.distance_km : null };
+    if (kind !== 'lift') return null;
+    const exercises = s.exercises.filter((e) => typeof e?.name === 'string' && Number.isInteger(e?.sets) && e.sets > 0)
+      .map((e) => ({ ...e, muscle: typeof e.muscle_group === 'string' && e.muscle_group.trim() ? e.muscle_group.trim().toLowerCase() : null,
+        rest: isNum(e.rest_seconds) && e.rest_seconds > 0 ? e.rest_seconds : null }));
+    return exercises.length ? { ...s, kind: 'lift', exercises } : null;
   }
   recipe(id) { const r = this.recipes[id]; return r && Array.isArray(r.steps) && r.steps.length ? r : null; }
 }

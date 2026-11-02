@@ -1,5 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#1B1C1F"/>
-  <path d="M96 404 V250 a160 160 0 0 1 320 0 V404" fill="none" stroke="#C9A468" stroke-width="10" stroke-linecap="round" opacity=".55"/>
-  <text x="256" y="352" text-anchor="middle" font-family="Archivo" font-weight="800" font-stretch="125%" font-size="300" fill="#DC7962" letter-spacing="-8">S</text>
+  <rect width="512" height="512" fill="#0C0B09"/>
+  <circle cx="256" cy="256" r="168" fill="none" stroke="#2A251C" stroke-width="5"/>
+  <path d="M256 88 A168 168 0 1 1 116.3 349.3" fill="none" stroke="#C6A15B" stroke-width="7" stroke-linecap="round"/>
+  <text x="256" y="262" text-anchor="middle" dominant-baseline="middle" font-family="Cormorant Garamond" font-weight="500" font-size="250" fill="#C6A15B">S</text>
 </svg>
