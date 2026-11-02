@@ -1,0 +1,1581 @@
+{
+  "schema_version": 1,
+  "meta": {
+    "example": true,
+    "cycle_name": "EXAMPLE — not real data",
+    "start_date": "2026-11-02",
+    "end_date": "2026-11-15",
+    "daily_kcal_target": 1600,
+    "daily_protein_target_g": 120,
+    "bodyweight_start_kg": 70,
+    "bodyweight_target_kg": 72
+  },
+  "days": [
+    {
+      "date": "2026-11-02",
+      "slots": [
+        {
+          "id": "breakfast",
+          "time": "07:30",
+          "type": "meal",
+          "title": "Example breakfast bowl",
+          "items": [
+            {
+              "name": "Example oats",
+              "item_id": "ex_oats",
+              "grams": 80,
+              "kcal": 304,
+              "protein_g": 10.4
+            },
+            {
+              "name": "Example yogurt",
+              "item_id": "ex_yogurt",
+              "grams": 200,
+              "kcal": 120,
+              "protein_g": 20
+            },
+            {
+              "name": "Example banana",
+              "item_id": "ex_banana",
+              "grams": 120,
+              "kcal": 108,
+              "protein_g": 1.2
+            }
+          ]
+        },
+        {
+          "id": "note",
+          "time": "10:00",
+          "type": "note",
+          "title": "Example note: placeholder reminder text"
+        },
+        {
+          "id": "lunch",
+          "time": "12:30",
+          "type": "meal",
+          "title": "Example lunch box",
+          "items": [
+            {
+              "name": "Example chicken",
+              "item_id": "ex_chicken",
+              "grams": 150,
+              "kcal": 248,
+              "protein_g": 46.5
+            },
+            {
+              "name": "Example rice (dry)",
+              "item_id": "ex_rice",
+              "grams": 90,
+              "kcal": 324,
+              "protein_g": 6.3
+            }
+          ]
+        },
+        {
+          "id": "gym",
+          "time": "17:30",
+          "type": "gym",
+          "title": "Example session"
+        },
+        {
+          "id": "dinner",
+          "time": "19:30",
+          "type": "meal",
+          "title": "Example lentil stew with eggs",
+          "recipe_id": "ex_stew",
+          "items": [
+            {
+              "name": "Example lentils (dry)",
+              "item_id": "ex_lentils",
+              "grams": 80,
+              "kcal": 280,
+              "protein_g": 20
+            },
+            {
+              "name": "Example eggs",
+              "item_id": "ex_eggs",
+              "grams": 100,
+              "kcal": 143,
+              "protein_g": 13
+            },
+            {
+              "name": "Example peanut butter",
+              "item_id": "ex_pb",
+              "grams": 20,
+              "kcal": 120,
+              "protein_g": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "date": "2026-11-03",
+      "slots": [
+        {
+          "id": "breakfast",
+          "time": "07:30",
+          "type": "meal",
+          "title": "Example breakfast bowl",
+          "items": [
+            {
+              "name": "Example oats",
+              "item_id": "ex_oats",
+              "grams": 80,
+              "kcal": 304,
+              "protein_g": 10.4
+            },
+            {
+              "name": "Example yogurt",
+              "item_id": "ex_yogurt",
+              "grams": 200,
+              "kcal": 120,
+              "protein_g": 20
+            },
+            {
+              "name": "Example banana",
+              "item_id": "ex_banana",
+              "grams": 120,
+              "kcal": 108,
+              "protein_g": 1.2
+            }
+          ]
+        },
+        {
+          "id": "lunch",
+          "time": "12:30",
+          "type": "meal",
+          "title": "Example lunch box",
+          "items": [
+            {
+              "name": "Example chicken",
+              "item_id": "ex_chicken",
+              "grams": 150,
+              "kcal": 248,
+              "protein_g": 46.5
+            },
+            {
+              "name": "Example rice (dry)",
+              "item_id": "ex_rice",
+              "grams": 90,
+              "kcal": 324,
+              "protein_g": 6.3
+            }
+          ]
+        },
+        {
+          "id": "dinner",
+          "time": "19:30",
+          "type": "meal",
+          "title": "Example lentil stew with eggs",
+          "recipe_id": "ex_stew",
+          "items": [
+            {
+              "name": "Example lentils (dry)",
+              "item_id": "ex_lentils",
+              "grams": 80,
+              "kcal": 280,
+              "protein_g": 20
+            },
+            {
+              "name": "Example eggs",
+              "item_id": "ex_eggs",
+              "grams": 100,
+              "kcal": 143,
+              "protein_g": 13
+            },
+            {
+              "name": "Example peanut butter",
+              "item_id": "ex_pb",
+              "grams": 20,
+              "kcal": 120,
+              "protein_g": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "date": "2026-11-04",
+      "slots": [
+        {
+          "id": "breakfast",
+          "time": "07:30",
+          "type": "meal",
+          "title": "Example breakfast bowl",
+          "items": [
+            {
+              "name": "Example oats",
+              "item_id": "ex_oats",
+              "grams": 80,
+              "kcal": 304,
+              "protein_g": 10.4
+            },
+            {
+              "name": "Example yogurt",
+              "item_id": "ex_yogurt",
+              "grams": 200,
+              "kcal": 120,
+              "protein_g": 20
+            },
+            {
+              "name": "Example banana",
+              "item_id": "ex_banana",
+              "grams": 120,
+              "kcal": 108,
+              "protein_g": 1.2
+            }
+          ]
+        },
+        {
+          "id": "note",
+          "time": "10:00",
+          "type": "note",
+          "title": "Example note: placeholder reminder text"
+        },
+        {
+          "id": "lunch",
+          "time": "12:30",
+          "type": "meal",
+          "title": "Example lunch box",
+          "items": [
+            {
+              "name": "Example chicken",
+              "item_id": "ex_chicken",
+              "grams": 150,
+              "kcal": 248,
+              "protein_g": 46.5
+            },
+            {
+              "name": "Example rice (dry)",
+              "item_id": "ex_rice",
+              "grams": 90,
+              "kcal": 324,
+              "protein_g": 6.3
+            }
+          ]
+        },
+        {
+          "id": "gym",
+          "time": "17:30",
+          "type": "gym",
+          "title": "Example session"
+        },
+        {
+          "id": "dinner",
+          "time": "19:30",
+          "type": "meal",
+          "title": "Example lentil stew with eggs",
+          "recipe_id": "ex_stew",
+          "items": [
+            {
+              "name": "Example lentils (dry)",
+              "item_id": "ex_lentils",
+              "grams": 80,
+              "kcal": 280,
+              "protein_g": 20
+            },
+            {
+              "name": "Example eggs",
+              "item_id": "ex_eggs",
+              "grams": 100,
+              "kcal": 143,
+              "protein_g": 13
+            },
+            {
+              "name": "Example peanut butter",
+              "item_id": "ex_pb",
+              "grams": 20,
+              "kcal": 120,
+              "protein_g": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "date": "2026-11-05",
+      "slots": [
+        {
+          "id": "breakfast",
+          "time": "07:30",
+          "type": "meal",
+          "title": "Example breakfast bowl",
+          "items": [
+            {
+              "name": "Example oats",
+              "item_id": "ex_oats",
+              "grams": 80,
+              "kcal": 304,
+              "protein_g": 10.4
+            },
+            {
+              "name": "Example yogurt",
+              "item_id": "ex_yogurt",
+              "grams": 200,
+              "kcal": 120,
+              "protein_g": 20
+            },
+            {
+              "name": "Example banana",
+              "item_id": "ex_banana",
+              "grams": 120,
+              "kcal": 108,
+              "protein_g": 1.2
+            }
+          ]
+        },
+        {
+          "id": "lunch",
+          "time": "12:30",
+          "type": "meal",
+          "title": "Example lunch box",
+          "items": [
+            {
+              "name": "Example chicken",
+              "item_id": "ex_chicken",
+              "grams": 150,
+              "kcal": 248,
+              "protein_g": 46.5
+            },
+            {
+              "name": "Example rice (dry)",
+              "item_id": "ex_rice",
+              "grams": 90,
+              "kcal": 324,
+              "protein_g": 6.3
+            }
+          ]
+        },
+        {
+          "id": "dinner",
+          "time": "19:30",
+          "type": "meal",
+          "title": "Example lentil stew with eggs",
+          "recipe_id": "ex_stew",
+          "items": [
+            {
+              "name": "Example lentils (dry)",
+              "item_id": "ex_lentils",
+              "grams": 80,
+              "kcal": 280,
+              "protein_g": 20
+            },
+            {
+              "name": "Example eggs",
+              "item_id": "ex_eggs",
+              "grams": 100,
+              "kcal": 143,
+              "protein_g": 13
+            },
+            {
+              "name": "Example peanut butter",
+              "item_id": "ex_pb",
+              "grams": 20,
+              "kcal": 120,
+              "protein_g": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "date": "2026-11-06",
+      "slots": [
+        {
+          "id": "breakfast",
+          "time": "07:30",
+          "type": "meal",
+          "title": "Example breakfast bowl",
+          "items": [
+            {
+              "name": "Example oats",
+              "item_id": "ex_oats",
+              "grams": 80,
+              "kcal": 304,
+              "protein_g": 10.4
+            },
+            {
+              "name": "Example yogurt",
+              "item_id": "ex_yogurt",
+              "grams": 200,
+              "kcal": 120,
+              "protein_g": 20
+            },
+            {
+              "name": "Example banana",
+              "item_id": "ex_banana",
+              "grams": 120,
+              "kcal": 108,
+              "protein_g": 1.2
+            }
+          ]
+        },
+        {
+          "id": "note",
+          "time": "10:00",
+          "type": "note",
+          "title": "Example note: placeholder reminder text"
+        },
+        {
+          "id": "lunch",
+          "time": "12:30",
+          "type": "meal",
+          "title": "Example lunch box",
+          "items": [
+            {
+              "name": "Example chicken",
+              "item_id": "ex_chicken",
+              "grams": 150,
+              "kcal": 248,
+              "protein_g": 46.5
+            },
+            {
+              "name": "Example rice (dry)",
+              "item_id": "ex_rice",
+              "grams": 90,
+              "kcal": 324,
+              "protein_g": 6.3
+            }
+          ]
+        },
+        {
+          "id": "gym",
+          "time": "17:30",
+          "type": "gym",
+          "title": "Example session"
+        },
+        {
+          "id": "dinner",
+          "time": "19:30",
+          "type": "meal",
+          "title": "Example lentil stew with eggs",
+          "recipe_id": "ex_stew",
+          "items": [
+            {
+              "name": "Example lentils (dry)",
+              "item_id": "ex_lentils",
+              "grams": 80,
+              "kcal": 280,
+              "protein_g": 20
+            },
+            {
+              "name": "Example eggs",
+              "item_id": "ex_eggs",
+              "grams": 100,
+              "kcal": 143,
+              "protein_g": 13
+            },
+            {
+              "name": "Example peanut butter",
+              "item_id": "ex_pb",
+              "grams": 20,
+              "kcal": 120,
+              "protein_g": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "date": "2026-11-07",
+      "slots": [
+        {
+          "id": "breakfast",
+          "time": "07:30",
+          "type": "meal",
+          "title": "Example breakfast bowl",
+          "items": [
+            {
+              "name": "Example oats",
+              "item_id": "ex_oats",
+              "grams": 80,
+              "kcal": 304,
+              "protein_g": 10.4
+            },
+            {
+              "name": "Example yogurt",
+              "item_id": "ex_yogurt",
+              "grams": 200,
+              "kcal": 120,
+              "protein_g": 20
+            },
+            {
+              "name": "Example banana",
+              "item_id": "ex_banana",
+              "grams": 120,
+              "kcal": 108,
+              "protein_g": 1.2
+            }
+          ]
+        },
+        {
+          "id": "lunch",
+          "time": "12:30",
+          "type": "meal",
+          "title": "Example lunch box",
+          "items": [
+            {
+              "name": "Example chicken",
+              "item_id": "ex_chicken",
+              "grams": 150,
+              "kcal": 248,
+              "protein_g": 46.5
+            },
+            {
+              "name": "Example rice (dry)",
+              "item_id": "ex_rice",
+              "grams": 90,
+              "kcal": 324,
+              "protein_g": 6.3
+            }
+          ]
+        },
+        {
+          "id": "dinner",
+          "time": "19:30",
+          "type": "meal",
+          "title": "Example lentil stew with eggs",
+          "recipe_id": "ex_stew",
+          "items": [
+            {
+              "name": "Example lentils (dry)",
+              "item_id": "ex_lentils",
+              "grams": 80,
+              "kcal": 280,
+              "protein_g": 20
+            },
+            {
+              "name": "Example eggs",
+              "item_id": "ex_eggs",
+              "grams": 100,
+              "kcal": 143,
+              "protein_g": 13
+            },
+            {
+              "name": "Example peanut butter",
+              "item_id": "ex_pb",
+              "grams": 20,
+              "kcal": 120,
+              "protein_g": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "date": "2026-11-08",
+      "slots": [
+        {
+          "id": "breakfast",
+          "time": "07:30",
+          "type": "meal",
+          "title": "Example breakfast bowl",
+          "items": [
+            {
+              "name": "Example oats",
+              "item_id": "ex_oats",
+              "grams": 80,
+              "kcal": 304,
+              "protein_g": 10.4
+            },
+            {
+              "name": "Example yogurt",
+              "item_id": "ex_yogurt",
+              "grams": 200,
+              "kcal": 120,
+              "protein_g": 20
+            },
+            {
+              "name": "Example banana",
+              "item_id": "ex_banana",
+              "grams": 120,
+              "kcal": 108,
+              "protein_g": 1.2
+            }
+          ]
+        },
+        {
+          "id": "lunch",
+          "time": "12:30",
+          "type": "meal",
+          "title": "Example lunch box",
+          "items": [
+            {
+              "name": "Example chicken",
+              "item_id": "ex_chicken",
+              "grams": 150,
+              "kcal": 248,
+              "protein_g": 46.5
+            },
+            {
+              "name": "Example rice (dry)",
+              "item_id": "ex_rice",
+              "grams": 90,
+              "kcal": 324,
+              "protein_g": 6.3
+            }
+          ]
+        },
+        {
+          "id": "cook",
+          "time": "15:00",
+          "type": "cook",
+          "title": "Example batch cook: lentil stew",
+          "recipe_id": "ex_stew",
+          "notes": "Placeholder: makes the dinners for the next few days."
+        },
+        {
+          "id": "dinner",
+          "time": "19:30",
+          "type": "meal",
+          "title": "Example lentil stew with eggs",
+          "recipe_id": "ex_stew",
+          "items": [
+            {
+              "name": "Example lentils (dry)",
+              "item_id": "ex_lentils",
+              "grams": 80,
+              "kcal": 280,
+              "protein_g": 20
+            },
+            {
+              "name": "Example eggs",
+              "item_id": "ex_eggs",
+              "grams": 100,
+              "kcal": 143,
+              "protein_g": 13
+            },
+            {
+              "name": "Example peanut butter",
+              "item_id": "ex_pb",
+              "grams": 20,
+              "kcal": 120,
+              "protein_g": 5
+            }
+          ]
+        },
+        {
+          "id": "freezer",
+          "time": "21:00",
+          "type": "freezer",
+          "title": "Example: move 2 stew portions to the freezer"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-09",
+      "slots": [
+        {
+          "id": "breakfast",
+          "time": "07:30",
+          "type": "meal",
+          "title": "Example breakfast bowl",
+          "items": [
+            {
+              "name": "Example oats",
+              "item_id": "ex_oats",
+              "grams": 80,
+              "kcal": 304,
+              "protein_g": 10.4
+            },
+            {
+              "name": "Example yogurt",
+              "item_id": "ex_yogurt",
+              "grams": 200,
+              "kcal": 120,
+              "protein_g": 20
+            },
+            {
+              "name": "Example banana",
+              "item_id": "ex_banana",
+              "grams": 120,
+              "kcal": 108,
+              "protein_g": 1.2
+            }
+          ]
+        },
+        {
+          "id": "note",
+          "time": "10:00",
+          "type": "note",
+          "title": "Example note: placeholder reminder text"
+        },
+        {
+          "id": "lunch",
+          "time": "12:30",
+          "type": "meal",
+          "title": "Example lunch box",
+          "items": [
+            {
+              "name": "Example chicken",
+              "item_id": "ex_chicken",
+              "grams": 150,
+              "kcal": 248,
+              "protein_g": 46.5
+            },
+            {
+              "name": "Example rice (dry)",
+              "item_id": "ex_rice",
+              "grams": 90,
+              "kcal": 324,
+              "protein_g": 6.3
+            }
+          ]
+        },
+        {
+          "id": "gym",
+          "time": "17:30",
+          "type": "gym",
+          "title": "Example session"
+        },
+        {
+          "id": "dinner",
+          "time": "19:30",
+          "type": "meal",
+          "title": "Example lentil stew with eggs",
+          "recipe_id": "ex_stew",
+          "items": [
+            {
+              "name": "Example lentils (dry)",
+              "item_id": "ex_lentils",
+              "grams": 80,
+              "kcal": 280,
+              "protein_g": 20
+            },
+            {
+              "name": "Example eggs",
+              "item_id": "ex_eggs",
+              "grams": 100,
+              "kcal": 143,
+              "protein_g": 13
+            },
+            {
+              "name": "Example peanut butter",
+              "item_id": "ex_pb",
+              "grams": 20,
+              "kcal": 120,
+              "protein_g": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "date": "2026-11-10",
+      "slots": [
+        {
+          "id": "breakfast",
+          "time": "07:30",
+          "type": "meal",
+          "title": "Example breakfast bowl",
+          "items": [
+            {
+              "name": "Example oats",
+              "item_id": "ex_oats",
+              "grams": 80,
+              "kcal": 304,
+              "protein_g": 10.4
+            },
+            {
+              "name": "Example yogurt",
+              "item_id": "ex_yogurt",
+              "grams": 200,
+              "kcal": 120,
+              "protein_g": 20
+            },
+            {
+              "name": "Example banana",
+              "item_id": "ex_banana",
+              "grams": 120,
+              "kcal": 108,
+              "protein_g": 1.2
+            }
+          ]
+        },
+        {
+          "id": "lunch",
+          "time": "12:30",
+          "type": "meal",
+          "title": "Example lunch box",
+          "items": [
+            {
+              "name": "Example chicken",
+              "item_id": "ex_chicken",
+              "grams": 150,
+              "kcal": 248,
+              "protein_g": 46.5
+            },
+            {
+              "name": "Example rice (dry)",
+              "item_id": "ex_rice",
+              "grams": 90,
+              "kcal": 324,
+              "protein_g": 6.3
+            }
+          ]
+        },
+        {
+          "id": "dinner",
+          "time": "19:30",
+          "type": "meal",
+          "title": "Example lentil stew with eggs",
+          "recipe_id": "ex_stew",
+          "items": [
+            {
+              "name": "Example lentils (dry)",
+              "item_id": "ex_lentils",
+              "grams": 80,
+              "kcal": 280,
+              "protein_g": 20
+            },
+            {
+              "name": "Example eggs",
+              "item_id": "ex_eggs",
+              "grams": 100,
+              "kcal": 143,
+              "protein_g": 13
+            },
+            {
+              "name": "Example peanut butter",
+              "item_id": "ex_pb",
+              "grams": 20,
+              "kcal": 120,
+              "protein_g": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "date": "2026-11-11",
+      "slots": [
+        {
+          "id": "breakfast",
+          "time": "07:30",
+          "type": "meal",
+          "title": "Example breakfast bowl",
+          "items": [
+            {
+              "name": "Example oats",
+              "item_id": "ex_oats",
+              "grams": 80,
+              "kcal": 304,
+              "protein_g": 10.4
+            },
+            {
+              "name": "Example yogurt",
+              "item_id": "ex_yogurt",
+              "grams": 200,
+              "kcal": 120,
+              "protein_g": 20
+            },
+            {
+              "name": "Example banana",
+              "item_id": "ex_banana",
+              "grams": 120,
+              "kcal": 108,
+              "protein_g": 1.2
+            }
+          ]
+        },
+        {
+          "id": "note",
+          "time": "10:00",
+          "type": "note",
+          "title": "Example note: placeholder reminder text"
+        },
+        {
+          "id": "lunch",
+          "time": "12:30",
+          "type": "meal",
+          "title": "Example lunch box",
+          "items": [
+            {
+              "name": "Example chicken",
+              "item_id": "ex_chicken",
+              "grams": 150,
+              "kcal": 248,
+              "protein_g": 46.5
+            },
+            {
+              "name": "Example rice (dry)",
+              "item_id": "ex_rice",
+              "grams": 90,
+              "kcal": 324,
+              "protein_g": 6.3
+            }
+          ]
+        },
+        {
+          "id": "gym",
+          "time": "17:30",
+          "type": "gym",
+          "title": "Example session"
+        },
+        {
+          "id": "dinner",
+          "time": "19:30",
+          "type": "meal",
+          "title": "Example lentil stew with eggs",
+          "recipe_id": "ex_stew",
+          "items": [
+            {
+              "name": "Example lentils (dry)",
+              "item_id": "ex_lentils",
+              "grams": 80,
+              "kcal": 280,
+              "protein_g": 20
+            },
+            {
+              "name": "Example eggs",
+              "item_id": "ex_eggs",
+              "grams": 100,
+              "kcal": 143,
+              "protein_g": 13
+            },
+            {
+              "name": "Example peanut butter",
+              "item_id": "ex_pb",
+              "grams": 20,
+              "kcal": 120,
+              "protein_g": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "date": "2026-11-12",
+      "slots": [
+        {
+          "id": "breakfast",
+          "time": "07:30",
+          "type": "meal",
+          "title": "Example breakfast bowl",
+          "items": [
+            {
+              "name": "Example oats",
+              "item_id": "ex_oats",
+              "grams": 80,
+              "kcal": 304,
+              "protein_g": 10.4
+            },
+            {
+              "name": "Example yogurt",
+              "item_id": "ex_yogurt",
+              "grams": 200,
+              "kcal": 120,
+              "protein_g": 20
+            },
+            {
+              "name": "Example banana",
+              "item_id": "ex_banana",
+              "grams": 120,
+              "kcal": 108,
+              "protein_g": 1.2
+            }
+          ]
+        },
+        {
+          "id": "lunch",
+          "time": "12:30",
+          "type": "meal",
+          "title": "Example lunch box",
+          "items": [
+            {
+              "name": "Example chicken",
+              "item_id": "ex_chicken",
+              "grams": 150,
+              "kcal": 248,
+              "protein_g": 46.5
+            },
+            {
+              "name": "Example rice (dry)",
+              "item_id": "ex_rice",
+              "grams": 90,
+              "kcal": 324,
+              "protein_g": 6.3
+            }
+          ]
+        },
+        {
+          "id": "dinner",
+          "time": "19:30",
+          "type": "meal",
+          "title": "Example lentil stew with eggs",
+          "recipe_id": "ex_stew",
+          "items": [
+            {
+              "name": "Example lentils (dry)",
+              "item_id": "ex_lentils",
+              "grams": 80,
+              "kcal": 280,
+              "protein_g": 20
+            },
+            {
+              "name": "Example eggs",
+              "item_id": "ex_eggs",
+              "grams": 100,
+              "kcal": 143,
+              "protein_g": 13
+            },
+            {
+              "name": "Example peanut butter",
+              "item_id": "ex_pb",
+              "grams": 20,
+              "kcal": 120,
+              "protein_g": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "date": "2026-11-13",
+      "slots": [
+        {
+          "id": "breakfast",
+          "time": "07:30",
+          "type": "meal",
+          "title": "Example breakfast bowl",
+          "items": [
+            {
+              "name": "Example oats",
+              "item_id": "ex_oats",
+              "grams": 80,
+              "kcal": 304,
+              "protein_g": 10.4
+            },
+            {
+              "name": "Example yogurt",
+              "item_id": "ex_yogurt",
+              "grams": 200,
+              "kcal": 120,
+              "protein_g": 20
+            },
+            {
+              "name": "Example banana",
+              "item_id": "ex_banana",
+              "grams": 120,
+              "kcal": 108,
+              "protein_g": 1.2
+            }
+          ]
+        },
+        {
+          "id": "note",
+          "time": "10:00",
+          "type": "note",
+          "title": "Example note: placeholder reminder text"
+        },
+        {
+          "id": "lunch",
+          "time": "12:30",
+          "type": "meal",
+          "title": "Example lunch box",
+          "items": [
+            {
+              "name": "Example chicken",
+              "item_id": "ex_chicken",
+              "grams": 150,
+              "kcal": 248,
+              "protein_g": 46.5
+            },
+            {
+              "name": "Example rice (dry)",
+              "item_id": "ex_rice",
+              "grams": 90,
+              "kcal": 324,
+              "protein_g": 6.3
+            }
+          ]
+        },
+        {
+          "id": "gym",
+          "time": "17:30",
+          "type": "gym",
+          "title": "Example session"
+        },
+        {
+          "id": "dinner",
+          "time": "19:30",
+          "type": "meal",
+          "title": "Example lentil stew with eggs",
+          "recipe_id": "ex_stew",
+          "items": [
+            {
+              "name": "Example lentils (dry)",
+              "item_id": "ex_lentils",
+              "grams": 80,
+              "kcal": 280,
+              "protein_g": 20
+            },
+            {
+              "name": "Example eggs",
+              "item_id": "ex_eggs",
+              "grams": 100,
+              "kcal": 143,
+              "protein_g": 13
+            },
+            {
+              "name": "Example peanut butter",
+              "item_id": "ex_pb",
+              "grams": 20,
+              "kcal": 120,
+              "protein_g": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "date": "2026-11-14",
+      "slots": [
+        {
+          "id": "breakfast",
+          "time": "07:30",
+          "type": "meal",
+          "title": "Example breakfast bowl",
+          "items": [
+            {
+              "name": "Example oats",
+              "item_id": "ex_oats",
+              "grams": 80,
+              "kcal": 304,
+              "protein_g": 10.4
+            },
+            {
+              "name": "Example yogurt",
+              "item_id": "ex_yogurt",
+              "grams": 200,
+              "kcal": 120,
+              "protein_g": 20
+            },
+            {
+              "name": "Example banana",
+              "item_id": "ex_banana",
+              "grams": 120,
+              "kcal": 108,
+              "protein_g": 1.2
+            }
+          ]
+        },
+        {
+          "id": "lunch",
+          "time": "12:30",
+          "type": "meal",
+          "title": "Example lunch box",
+          "items": [
+            {
+              "name": "Example chicken",
+              "item_id": "ex_chicken",
+              "grams": 150,
+              "kcal": 248,
+              "protein_g": 46.5
+            },
+            {
+              "name": "Example rice (dry)",
+              "item_id": "ex_rice",
+              "grams": 90,
+              "kcal": 324,
+              "protein_g": 6.3
+            }
+          ]
+        },
+        {
+          "id": "dinner",
+          "time": "19:30",
+          "type": "meal",
+          "title": "Example lentil stew with eggs",
+          "recipe_id": "ex_stew",
+          "items": [
+            {
+              "name": "Example lentils (dry)",
+              "item_id": "ex_lentils",
+              "grams": 80,
+              "kcal": 280,
+              "protein_g": 20
+            },
+            {
+              "name": "Example eggs",
+              "item_id": "ex_eggs",
+              "grams": 100,
+              "kcal": 143,
+              "protein_g": 13
+            },
+            {
+              "name": "Example peanut butter",
+              "item_id": "ex_pb",
+              "grams": 20,
+              "kcal": 120,
+              "protein_g": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "date": "2026-11-15",
+      "slots": [
+        {
+          "id": "breakfast",
+          "time": "07:30",
+          "type": "meal",
+          "title": "Example breakfast bowl",
+          "items": [
+            {
+              "name": "Example oats",
+              "item_id": "ex_oats",
+              "grams": 80,
+              "kcal": 304,
+              "protein_g": 10.4
+            },
+            {
+              "name": "Example yogurt",
+              "item_id": "ex_yogurt",
+              "grams": 200,
+              "kcal": 120,
+              "protein_g": 20
+            },
+            {
+              "name": "Example banana",
+              "item_id": "ex_banana",
+              "grams": 120,
+              "kcal": 108,
+              "protein_g": 1.2
+            }
+          ]
+        },
+        {
+          "id": "lunch",
+          "time": "12:30",
+          "type": "meal",
+          "title": "Example lunch box",
+          "items": [
+            {
+              "name": "Example chicken",
+              "item_id": "ex_chicken",
+              "grams": 150,
+              "kcal": 248,
+              "protein_g": 46.5
+            },
+            {
+              "name": "Example rice (dry)",
+              "item_id": "ex_rice",
+              "grams": 90,
+              "kcal": 324,
+              "protein_g": 6.3
+            }
+          ]
+        },
+        {
+          "id": "cook",
+          "time": "15:00",
+          "type": "cook",
+          "title": "Example batch cook: lentil stew",
+          "recipe_id": "ex_stew",
+          "notes": "Placeholder: makes the dinners for the next few days."
+        },
+        {
+          "id": "dinner",
+          "time": "19:30",
+          "type": "meal",
+          "title": "Example lentil stew with eggs",
+          "recipe_id": "ex_stew",
+          "items": [
+            {
+              "name": "Example lentils (dry)",
+              "item_id": "ex_lentils",
+              "grams": 80,
+              "kcal": 280,
+              "protein_g": 20
+            },
+            {
+              "name": "Example eggs",
+              "item_id": "ex_eggs",
+              "grams": 100,
+              "kcal": 143,
+              "protein_g": 13
+            },
+            {
+              "name": "Example peanut butter",
+              "item_id": "ex_pb",
+              "grams": 20,
+              "kcal": 120,
+              "protein_g": 5
+            }
+          ]
+        },
+        {
+          "id": "freezer",
+          "time": "21:00",
+          "type": "freezer",
+          "title": "Example: move 2 stew portions to the freezer"
+        }
+      ]
+    }
+  ],
+  "recipes": {
+    "ex_stew": {
+      "title": "Example lentil stew",
+      "servings": 4,
+      "steps": [
+        {
+          "text": "Placeholder step: rinse the example lentils until the water runs clear."
+        },
+        {
+          "text": "Placeholder step: soften the example vegetables in a pot over medium heat.",
+          "timer_seconds": 300,
+          "doneness_test": "Example test: vegetables are soft and translucent."
+        },
+        {
+          "text": "Placeholder step: add lentils and water, bring to a simmer.",
+          "timer_seconds": 1200,
+          "doneness_test": "Example test: a lentil crushes easily against the side of the pot."
+        },
+        {
+          "text": "Placeholder step: boil the example eggs.",
+          "timer_seconds": 480,
+          "doneness_test": "Example test: yolk is set when halved."
+        },
+        {
+          "text": "Placeholder step: portion into 4 example containers and cool."
+        }
+      ]
+    }
+  },
+  "sessions": {
+    "2026-11-02": {
+      "title": "Example session A",
+      "exercises": [
+        {
+          "name": "Example squat",
+          "sets": 3,
+          "reps": 5,
+          "load_kg": 60,
+          "notes": "Placeholder note"
+        },
+        {
+          "name": "Example bench press",
+          "sets": 3,
+          "reps": 8,
+          "load_kg": 40
+        },
+        {
+          "name": "Example row",
+          "sets": 3,
+          "reps": 10,
+          "load_kg": 30
+        }
+      ]
+    },
+    "2026-11-04": {
+      "title": "Example session B",
+      "exercises": [
+        {
+          "name": "Example deadlift",
+          "sets": 3,
+          "reps": 5,
+          "load_kg": 80,
+          "notes": "Placeholder note"
+        },
+        {
+          "name": "Example overhead press",
+          "sets": 3,
+          "reps": 8,
+          "load_kg": 25
+        },
+        {
+          "name": "Example push-up",
+          "sets": 2,
+          "reps": 10,
+          "load_kg": null,
+          "notes": "Bodyweight: no load logged"
+        }
+      ]
+    },
+    "2026-11-06": {
+      "title": "Example session A",
+      "exercises": [
+        {
+          "name": "Example squat",
+          "sets": 3,
+          "reps": 5,
+          "load_kg": 60,
+          "notes": "Placeholder note"
+        },
+        {
+          "name": "Example bench press",
+          "sets": 3,
+          "reps": 8,
+          "load_kg": 40
+        },
+        {
+          "name": "Example row",
+          "sets": 3,
+          "reps": 10,
+          "load_kg": 30
+        }
+      ]
+    },
+    "2026-11-09": {
+      "title": "Example session A",
+      "exercises": [
+        {
+          "name": "Example squat",
+          "sets": 3,
+          "reps": 5,
+          "load_kg": 65,
+          "notes": "Placeholder note"
+        },
+        {
+          "name": "Example bench press",
+          "sets": 3,
+          "reps": 8,
+          "load_kg": 42.5
+        },
+        {
+          "name": "Example row",
+          "sets": 3,
+          "reps": 10,
+          "load_kg": 30
+        }
+      ]
+    },
+    "2026-11-11": {
+      "title": "Example session B",
+      "exercises": [
+        {
+          "name": "Example deadlift",
+          "sets": 3,
+          "reps": 5,
+          "load_kg": 85,
+          "notes": "Placeholder note"
+        },
+        {
+          "name": "Example overhead press",
+          "sets": 3,
+          "reps": 8,
+          "load_kg": 27.5
+        },
+        {
+          "name": "Example push-up",
+          "sets": 2,
+          "reps": 10,
+          "load_kg": null,
+          "notes": "Bodyweight: no load logged"
+        }
+      ]
+    },
+    "2026-11-13": {
+      "title": "Example session A",
+      "exercises": [
+        {
+          "name": "Example squat",
+          "sets": 3,
+          "reps": 5,
+          "load_kg": 65,
+          "notes": "Placeholder note"
+        },
+        {
+          "name": "Example bench press",
+          "sets": 3,
+          "reps": 8,
+          "load_kg": 42.5
+        },
+        {
+          "name": "Example row",
+          "sets": 3,
+          "reps": 10,
+          "load_kg": 30
+        }
+      ]
+    }
+  },
+  "pantry": [
+    {
+      "item_id": "ex_oats",
+      "name": "Example oats",
+      "quantity": 500,
+      "unit": "g",
+      "source": "counted",
+      "as_of": "2026-11-01"
+    },
+    {
+      "item_id": "ex_yogurt",
+      "name": "Example yogurt",
+      "quantity": 1000,
+      "unit": "g",
+      "source": "counted",
+      "as_of": "2026-11-01"
+    },
+    {
+      "item_id": "ex_chicken",
+      "name": "Example chicken",
+      "quantity": 600,
+      "unit": "g",
+      "source": "calculated",
+      "as_of": "2026-11-01"
+    },
+    {
+      "item_id": "ex_rice",
+      "name": "Example rice (dry)",
+      "quantity": 2000,
+      "unit": "g",
+      "source": "counted",
+      "as_of": "2026-11-01"
+    },
+    {
+      "item_id": "ex_lentils",
+      "name": "Example lentils (dry)",
+      "quantity": 400,
+      "unit": "g",
+      "source": "counted",
+      "as_of": "2026-11-01"
+    },
+    {
+      "item_id": "ex_eggs",
+      "name": "Example eggs",
+      "quantity": 12,
+      "unit": "pcs",
+      "grams_per_unit": 50,
+      "source": "counted",
+      "as_of": "2026-11-01"
+    },
+    {
+      "item_id": "ex_pb",
+      "name": "Example peanut butter",
+      "quantity": 340,
+      "unit": "g",
+      "source": "calculated",
+      "as_of": "2026-10-30"
+    }
+  ],
+  "fun_equivalents": [
+    {
+      "name": "example grand piano",
+      "plural": "example grand pianos",
+      "kg": 400,
+      "note": "EXAMPLE — reference weights are rough approximations, not measurements."
+    },
+    {
+      "name": "example motorbike",
+      "plural": "example motorbikes",
+      "kg": 200,
+      "note": "EXAMPLE — reference weights are rough approximations, not measurements."
+    },
+    {
+      "name": "example sofa",
+      "plural": "example sofas",
+      "kg": 80,
+      "note": "EXAMPLE — reference weights are rough approximations, not measurements."
+    },
+    {
+      "name": "example horse",
+      "plural": "example horses",
+      "kg": 500,
+      "note": "EXAMPLE — reference weights are rough approximations, not measurements."
+    }
+  ]
+}
