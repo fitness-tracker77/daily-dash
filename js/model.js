@@ -935,6 +935,20 @@ export function progressAt(date, at = nowAt()) {
   }
   return { planned, done, complete: planned > 0 && done >= planned };
 }
+// Today's agenda: unticked items whose time has passed are "still open" (oldest first); "next up" is the first
+// unticked item whose time is still ahead (an item with no time counts as ahead). `at` = { date, minutes }.
+export function todayAgenda(date, at = nowAt()) {
+  const open = [], ahead = [];
+  const sp = sessionProgress(date);
+  for (const s of C.slots(date)) {
+    const pending = s.type === 'meal' || s.type === 'cook' || s.type === 'freezer' ? !tick(date, s) : s.type === 'gym' ? !!sp && sp.done < sp.planned : false;
+    if (!pending) continue;
+    const m = clockMin(s.time);
+    (date === at.date && m != null && m < at.minutes ? open : ahead).push(s);
+  }
+  const t = (s) => clockMin(s.time) ?? 9999;
+  return { open: open.sort((a, b) => t(a) - t(b)), next: ahead[0] || null };
+}
 // "Day X of Y of the cycle": today's position between meta.start_date and meta.end_date (null when unknown or outside)
 export function cyclePosition(date = today()) {
   if (!C?.start || !C?.end) return null;

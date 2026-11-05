@@ -486,3 +486,5 @@ body.has-rest .toast { bottom: calc(var(--tabbar) + var(--safe-b) + 84px); }
 .weekdots .is-today i { border-color: var(--gold-ink); }
 .weekdots .is-missed i { border-style: dashed; }
 .weekdots .is-done, .weekdots .is-today { color: var(--text); }
+
+.nextup--open .nextup__label { color: var(--bad); }

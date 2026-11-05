@@ -22,7 +22,8 @@ export function renderToday(root, ctx) {
   const ses = C.session(date);
   const sp = M.sessionProgress(date);
   const prog = M.progress(date);
-  const next = date === t ? nextUp(date, slots, sp) : null;
+  const agenda = date === t ? M.todayAgenda(date) : { open: [], next: null };
+  const next = agenda.next;
 
   root.innerHTML = `
     ${head(ctx, `<span class="streak" title="Days in a row with everything planned done">Streak <strong>${sk.current}</strong> day${sk.current === 1 ? '' : 's'}</span>`)}
@@ -49,7 +50,7 @@ export function renderToday(root, ctx) {
     ${e.partial ? `<p class="fine warn-text">${ICON.warn} Some ticked items have no kcal or protein in cycle.json, so they are not counted.</p>` : ''}
     ${prog.planned ? `<div class="dayprog">${progressBar(prog.done, prog.planned, { label: 'Planned items done today' })}<span>${prog.done} of ${prog.planned} done</span></div>` : ''}
     ${prog.complete ? `<p class="complete-line" data-complete>Day complete</p>`
-      : next ? `<p class="nextup"><span class="nextup__label">Next up</span><span class="nextup__time">${esc(next.time ?? '')}</span><span>${esc(next.title ?? '')}</span></p>` : ''}
+      : `${agenda.open.map((o) => `<p class="nextup nextup--open"><span class="nextup__label">Still open</span><span class="nextup__time">${esc(o.time ?? '')}</span><span>${esc(o.title ?? '')}</span></p>`).join('')}${next ? `<p class="nextup"><span class="nextup__label">Next up</span><span class="nextup__time">${esc(next.time ?? '')}</span><span>${esc(next.title ?? '')}</span></p>` : ''}`}
     <section class="timeline" aria-label="Plan for ${fmtDate(date, { dow: true, long: true })}">
       ${slots.length ? `<ol class="rows">${slots.map((s, i) => row(date, s, i, ses, sp)).join('')}</ol>`
         : `<p class="quiet">${C.inCycle(date) ? 'Nothing planned for this day.' : 'This date is outside the cycle.'}</p>`}
@@ -69,23 +70,21 @@ function weekBlock(date, C) {
   if (!days.some((d) => d.kcal != null)) return '';
   const idx = days.findIndex((d) => d.date === date);
   const bars = (key) => days.map((d) => ({ key: d.date, label: fmtDow(d.date, true).slice(0, 2), stack: [{ v: d[key] ?? 0, name: key }] }));
-  const logged = days.filter((d) => d.kcal != null);
-  const avgK = logged.reduce((a, d) => a + d.kcal, 0) / logged.length;
-  const avgP = logged.reduce((a, d) => a + d.protein, 0) / logged.length;
+  const t = today();
+  const logged = days.filter((d) => d.kcal != null && d.date < t); // today is left out until the day is over
+  const sofar = days.find((d) => d.date === t && d.kcal != null);
+  const avgK = logged.length ? logged.reduce((a, d) => a + d.kcal, 0) / logged.length : null;
+  const avgP = logged.length ? logged.reduce((a, d) => a + d.protein, 0) / logged.length : null;
   return `
     <section class="panel week" aria-label="This week" data-chart="week">
       <h2 class="h2">This week</h2>
-      <p class="sub">Average over ${logged.length} day${logged.length === 1 ? '' : 's'} with ticked meals: ${fmtNum(avgK)} kcal, ${fmtNum(avgP, 1)} g protein</p>
+      <p class="sub">${logged.length ? `${fmtNum(avgK)} kcal, ${fmtNum(avgP, 1)} g protein, average over ${logged.length} completed day${logged.length === 1 ? '' : 's'}` : 'No completed days with ticked meals yet'}${sofar ? `<br>Today so far: ${fmtNum(sofar.kcal)} kcal, ${fmtNum(sofar.protein, 1)} g protein` : ''}</p>
       <div class="week__grid">
         <figure><figcaption>Energy, kcal</figcaption>${barChart({ bars: bars('kcal'), highlight: idx, target: C.kcalTarget, height: 150, label: 'kcal per day this week' })}</figure>
         <figure><figcaption>Protein, g</figcaption>${barChart({ bars: bars('protein'), highlight: idx, target: C.proteinTarget, height: 150, label: 'Protein per day this week' })}</figure>
       </div>
       <p class="fine">Dashed line: your daily target.</p>
     </section>`;
-}
-
-function nextUp(date, slots, sp) {
-  return slots.find((s) => (tickable(s) && !M.tick(date, s)) || (s.type === 'gym' && sp && sp.done < sp.planned)) || null;
 }
 
 function row(date, s, i, ses, sp) {
