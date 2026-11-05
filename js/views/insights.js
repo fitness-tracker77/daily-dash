@@ -1,9 +1,10 @@
 import * as M from '../model.js';
 import { UNGROUPED } from '../data.js';
-import { esc, fmtNum, fmtKg, fmtDate, fmtMonthKey, isNum, sum, today, monthKey, addMonthKey, monthStart, monthEnd, dateRange, dow } from '../util.js';
+import { esc, fmtNum, fmtKg, fmtDate, fmtMonthKey, isNum, sum, today, monthKey, addMonthKey, monthStart, monthEnd, dateRange, dow, addDays } from '../util.js';
 import { openSheet } from '../ui.js';
 import { lineChart, barChart, donut } from '../charts.js';
 import { head, NL, nl, recapBlock } from './common.js';
+import { bodyweightBlock as bwBlock, bindBodyweight, bodyweightTop } from './bwchart.js';
 import { exerciseSheet } from './train.js';
 
 const ui = { measure: 'sets', kind: 'Month', anchor: null, ex: null, heat: null, month: null, eqOffset: 0 };
@@ -33,9 +34,9 @@ export function renderInsights(root, ctx) {
     ${M.isRecapDay(t) ? recapBlock(M.weekRecap(t)) : ''}
     ${muscleBlock(from, to, per)}
     ${setsBlock(from, to)}
-    ${exerciseBlock(from, to)}
+    ${exerciseBlock()}
     ${effortBlock(from, to)}
-    ${bodyweightBlock(from, to)}
+    ${bodyweightBlock()}
     ${nutritionBlock(from, to, C)}
     ${adherenceBlock(from, to)}
     ${runBlock(from, to)}
@@ -111,22 +112,23 @@ function adherenceBlock(from, to) {
       <h2 class="h2">Plan followed</h2>
       ${(() => { const cp = M.cyclePosition(); return cp ? `<p class="fine">Day ${cp.day} of ${cp.of} of the cycle</p>` : ''; })()}
       <p class="chartblock__key">${Math.round((done / planned) * 100)}% <small>${done} of ${planned} planned meals, sets and runs ticked</small></p>
-      ${barChart({ bars: weeks.map((w) => ({ key: w.week, label: fmtDate(w.week), stack: [{ v: Math.round(w.pct), name: '%' }] })), label: 'Share of the plan done per week', values: weeks.length <= 8 })}
-      <p class="fine">Past days count everything planned; today counts what you ticked or whose time has passed. Weeks start on Monday.</p>
+      ${barChart({ bars: weeks.map((w) => ({ key: w.week, label: fmtDate(w.week), stack: [{ v: Math.round(w.pct), name: '%' }] })), label: 'Share of the plan done per week', values: weeks.length <= 8, yMax: 100 })}
+      <p class="fine">Past days count everything planned; today counts only what you've ticked.</p>
     </section>`;
 }
 
 // ---------------------------------------------------------------- load and estimated 1RM for one exercise
-function exerciseBlock(from, to) {
+function exerciseBlock() {
+  const to = today(), from = addDays(to, -83); // always the last 12 weeks, whatever period is selected
   const list = M.exercisesLogged();
-  if (!list.length) return `<section class="chartblock" data-chart="exercise"><h2 class="h2">Load and estimated 1RM</h2><p class="quiet">${NL}: no sets ticked yet.</p></section>`;
+  if (!list.length) return `<section class="chartblock" data-chart="exercise"><h2 class="h2">Load and estimated 1RM <small>last 12 weeks</small></h2><p class="quiet">${NL}: no sets ticked yet.</p></section>`;
   if (!ui.ex || !list.some((e) => e.ex === ui.ex)) ui.ex = list[0].ex;
   const days = M.exerciseTrend(ui.ex, from, to);
   const loads = days.filter((d) => d.maxLoad != null).map((d) => ({ date: d.date, y: d.maxLoad, mark: d.pr ? 'pr' : undefined }));
   const e1 = days.filter((d) => d.bestE1rm != null).map((d) => ({ date: d.date, y: d.bestE1rm }));
   return `
     <section class="chartblock" data-chart="exercise" data-from="${from}" data-to="${to}">
-      <h2 class="h2">Load and estimated 1RM</h2>
+      <h2 class="h2">Load and estimated 1RM <small>last 12 weeks</small></h2>
       <label class="select"><span class="sr">Exercise</span><select data-ex>${list.map((e) => `<option value="${esc(e.ex)}"${e.ex === ui.ex ? ' selected' : ''}>${esc(e.name)}</option>`).join('')}</select></label>
       ${loads.length ? `<p class="chartblock__key">${fmtKg(Math.max(...loads.map((p) => p.y)))} kg <small>heaviest set in range</small></p>
         ${loads.length > 1 ? lineChart({ points: loads, x0: from, x1: to, highlight: 'max', unit: 'kg', label: 'Heaviest set per session' }) : '<p class="fine">Chart appears after 2 sessions.</p>'}` : `<p class="quiet">Load ${NL} in this range.</p>`}
@@ -138,29 +140,19 @@ function exerciseBlock(from, to) {
 }
 
 // ---------------------------------------------------------------- bodyweight against the target path
-function bodyweightBlock(from, to) {
-  const entries = M.bodyweights().filter((b) => b.date >= from && b.date <= to);
-  const path = M.targetPath();
-  let target = null;
-  if (path) {
-    const a = from > path.start ? from : path.start, b = to < path.end ? to : path.end;
-    if (a <= b) target = { from: { date: a, y: path.at(a) }, to: { date: b, y: path.at(b) } };
-  }
-  const pts = entries.map((b) => { const v = M.vsPath(b); return { date: b.date, y: b.kg, mark: v?.side }; });
-  const last = entries[entries.length - 1];
-  const v = last ? M.vsPath(last) : null;
-  const sm = last ? M.bodyweightSummary(M.bodyweights().filter((b) => b.date <= last.date)) : null;
+function bodyweightBlock() {
+  // always the last 12 weeks, whatever period is selected above
+  const bw = M.bodyweights();
+  const top = bodyweightTop(M.bodyweightSummary(bw));
   return `
-    <section class="chartblock" data-chart="bodyweight" data-from="${from}" data-to="${to}">
-      <h2 class="h2">Bodyweight</h2>
-      ${last ? `<p class="fine">latest ${fmtKg(last.kg)} kg${sm.avg != null ? ` · 7-day average ${fmtNum(sm.avg, 1)} kg` : ''}<br>${M.bodyweightRateText(sm)}</p>
-        <p class="chartblock__key">${fmtKg(last.kg)} kg <small>${fmtDate(last.date)}${v ? `, ${fmtNum(Math.abs(v.diff), 1)} kg ${v.side === 'on' ? 'on' : v.side} the path` : ''}</small></p>
-        ${lineChart({ points: pts, target, x0: from, x1: to, unit: 'kg', minSpan: 2, tickStep: 0.5, tickDp: 1, avg: M.bodyweightAverages().filter((a) => a.date >= from && a.date <= to), joinPoints: false, label: 'Bodyweight 7-day average, daily weigh-ins and target path' })}
-        <p class="fine">${path ? `Dashed: straight path from ${fmtKg(path.from)} kg on ${fmtDate(path.start)} to ${fmtKg(path.to)} kg on ${fmtDate(path.end)}. Line: 7-day average (needs 3 readings in 7 days). Dots: daily weigh-ins, filled above the path, hollow below.` : 'No target path: bodyweight_start_kg or bodyweight_target_kg is missing in cycle.json.'}</p>
-        <button class="link" data-more="bodyweight">All entries</button>`
-      : `<p class="quiet">${NL} in this range.</p>`}
+    <section class="chartblock" data-chart="bodyweight">
+      <h2 class="h2">Bodyweight <small>last 12 weeks</small></h2>
+      ${bw.length ? `<p class="chartblock__key">${top.big} kg <small>${top.tag}${top.tag === 'latest' ? '' : ''} · ${esc(top.sub)}</small></p>
+        ${bodyweightBlock12()}
+        <button class="link" data-more="bodyweight">All entries</button>` : `<p class="quiet">${NL} yet.</p>`}
     </section>`;
 }
+const bodyweightBlock12 = () => bwBlock({ range: '12w', compact: true });
 
 // ---------------------------------------------------------------- kcal and protein against targets
 function nutritionBlock(from, to, C) {
@@ -320,6 +312,7 @@ function more(kind, from, to) {
 }
 
 function bind(root, ctx, from, to) {
+  bindBodyweight(root);
   root.querySelectorAll('[data-measure]').forEach((b) => b.addEventListener('click', () => { ui.measure = b.dataset.measure; ctx.rerender(); }));
   root.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => { ui.kind = b.dataset.kind; ui.anchor = null; ui.heat = null; ui.month = null; ctx.rerender(); }));
   root.querySelectorAll('[data-step]').forEach((b) => b.addEventListener('click', () => {

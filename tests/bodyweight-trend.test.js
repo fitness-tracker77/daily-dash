@@ -27,17 +27,6 @@ test('window is the last 7 calendar days inclusive', () => {
   assert.equal(on(5), undefined); assert.equal(on(2), undefined);
 });
 
-test('4-week rate and its fallback text', () => {
-  reset(); useCycle({ schema_version: 2, meta: { start_date: '2026-09-01', end_date: '2026-12-01', bodyweight_start_kg: 66, bodyweight_target_kg: 70 }, days: [], sessions: {} });
-  const day = (n, kg) => ({ date: new Date(Date.UTC(2026, 8, 1 + n)).toISOString().slice(0, 10), kg });
-  const list = []; for (let n = 0; n <= 35; n++) list.push(day(n, 66 + n * 0.05)); // +0.05 kg/day
-  const sm = M.bodyweightSummary(list);
-  near(sm.avg, 66 + 32 * 0.05); near(sm.rate, 0.35); // average rises 1.4 kg over 4 weeks: 0.35 per week
-  assert.match(M.bodyweightRateText(sm), /^\+0\.35 kg\/week over the last 4 weeks · path 0\.31 kg\/week$/);
-  assert.equal(M.bodyweightRateText(M.bodyweightSummary(list.slice(15))), 'rate: not enough weigh-ins');
-  assert.equal(M.bodyweightRateText(null), 'rate: not enough weigh-ins');
-});
-
 test('label never covers a dot', () => {
   const dots = [{ x: 100, y: 80 }, { x: 150, y: 70 }, { x: 200, y: 82 }];
   const sel = { cx: 250, cy: 80 };

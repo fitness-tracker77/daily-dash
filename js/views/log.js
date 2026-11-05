@@ -1,7 +1,7 @@
 import * as M from '../model.js';
 import { esc, fmtNum, fmtKg, fmtDate, today, isNum, num, haptic, isValidDate, fmtClock, parseClock, fmtPace } from '../util.js';
 import { openSheet, closeSheet, toast, ICON } from '../ui.js';
-import { lineChart } from '../charts.js';
+import { bodyweightBlock, bindBodyweight, bwState, bodyweightTop } from './bwchart.js';
 import { head, backupBanner, NL } from './common.js';
 
 let exportRangeId = '7d';
@@ -15,30 +15,21 @@ export function renderLog(root, ctx) {
   const next = dates.find((d) => d > date) || null;
   const bw = M.bodyweights();
   const last = bw[bw.length - 1] || null;
-  const v = last ? M.vsPath(last) : null;
-  const avgs = M.bodyweightAverages(bw);
-  const sm = M.bodyweightSummary(bw);
-  const avgNow = sm?.avg != null ? { y: sm.avg } : null;
-  const path = M.targetPath();
-  const target = path ? { from: { date: path.start, y: path.from }, to: { date: path.end, y: path.to } } : null;
+  const top = bodyweightTop(M.bodyweightSummary(bw));
 
   root.innerHTML = `
     ${head(ctx, '<span>Log</span>')}
     ${backupBanner()}
     <section class="hero" aria-label="Bodyweight">
-      <p class="hero__figure figure" data-hero>${last ? fmtKg(last.kg) : '—'}<span class="hero__of"> kg</span></p>
-      <p class="hero__label">${last ? `latest ${fmtKg(last.kg)} kg${avgNow ? ` · 7-day average ${fmtNum(avgNow.y, 1)} kg` : ''}` : `bodyweight ${NL}`}</p>
-      ${last ? `<p class="hero__sub">${M.bodyweightRateText(sm)}</p>` : ''}
-      ${last ? `<p class="hero__sub">${fmtDate(last.date, { dow: true })}${v ? `, ${fmtNum(Math.abs(v.diff), 1)} kg ${v.side === 'on' ? 'on' : v.side} the target path` : ''}</p>` : ''}
+      <p class="hero__figure figure" data-hero>${top.big ?? '—'}<span class="hero__of"> kg</span>${top.tag ? `<span class="hero__tag"> ${top.tag}</span>` : ''}</p>
+      <p class="hero__label">${last ? esc(top.sub) : `bodyweight ${NL}`}</p>
     </section>
     <form class="form form--row" data-bw>
       <label class="field"><span>Date</span><input type="date" name="date" value="${t}" max="${t}" required></label>
       <label class="field"><span>Weight</span><input type="text" inputmode="decimal" name="kg" placeholder="kg" aria-label="Bodyweight in kg" data-focus-key="bwkg"><em>kg</em></label>
       <button class="btn btn--gold" type="submit">Save</button>
     </form>
-    ${bw.length ? `<section class="chartblock" data-chart="bw-log">
-      ${lineChart({ points: bw.map((b) => ({ date: b.date, y: b.kg, mark: M.vsPath(b)?.side })), target, unit: 'kg', minSpan: 2, tickStep: 0.5, tickDp: 1, avg: avgs, joinPoints: false, label: 'Bodyweight 7-day average, daily weigh-ins and target path' })}
-      <p class="fine">Line: 7-day average (needs 3 readings in 7 days). Dots: daily weigh-ins, filled above the target path, hollow below. ${target ? 'Dashed: the straight target path from cycle.json.' : 'No target path in cycle.json.'}</p></section>` : ''}
+    ${bw.length ? `<section class="chartblock" data-chart="bw-log">${bodyweightBlock({ range: bwState.range, chips: true })}</section>` : ''}
 
     <section class="entries" aria-label="Entries">
       <h2 class="h2">Entries</h2>
@@ -103,6 +94,7 @@ function entriesHTML(date) {
 }
 
 function bind(root, ctx) {
+  bindBodyweight(root, () => ctx.rerender());
   const date = ctx.logDate;
   root.querySelector('[data-bw]').addEventListener('submit', (ev) => {
     ev.preventDefault();

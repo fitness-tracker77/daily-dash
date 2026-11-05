@@ -497,3 +497,17 @@ body.has-rest .toast { bottom: calc(var(--tabbar) + var(--safe-b) + 84px); }
 .period .icon-btn:disabled { opacity: .3; }
 .milestone { margin: 10px 0 4px; padding: 14px var(--panel); border: 1px solid var(--gold); border-radius: var(--radius); background: var(--surface); }
 .milestone__n { margin: 0; font-size: 20px; font-weight: 700; color: var(--gold-ink); }
+
+/* bodyweight chart */
+.hero__tag { font-size: 15px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+.bw__wrap { position: relative; }
+.bw__dot { fill: var(--muted); opacity: .75; }
+.bw__avg { stroke: var(--gold); stroke-width: 2.2; fill: none; }
+.bw__avgdot { fill: var(--gold); }
+.bw__bridge { stroke: var(--gold); stroke-width: 1.5; stroke-dasharray: 1.5 4; opacity: .55; stroke-linecap: round; }
+.bw__plan { stroke-width: 1; }
+.bw__cursor { stroke: var(--muted); stroke-width: 1; opacity: .6; }
+.bw__hit { cursor: crosshair; }
+.bw__tip { margin: 6px 0 0; padding: 8px 10px; border-radius: var(--radius); background: var(--press); font-size: 13px; }
+.vsplan { margin-top: 12px; padding-top: 4px; border-top: 1px solid var(--line); }
+.vsplan .facts dd { text-align: right; max-width: 70%; }

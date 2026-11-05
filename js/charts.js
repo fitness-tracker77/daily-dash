@@ -136,13 +136,59 @@ export function lineChart({ points, target = null, hLine = null, x0 = null, x1 =
   return s + '</svg>';
 }
 
+// Bodyweight: gold line = 7-day average (a faint dotted bridge across days with no average, "no weigh-ins" over
+// gaps wider than 14 days), one grey dot per weigh-in with no line joining them, a thin dashed plan line over the
+// cycle's dates with an end label, no shaded area. Y axis: even 0.5 kg steps, at least 2.0 kg tall, every dot inside.
+// Tap a point to see that day's weigh-in and average (bindBodyweightChart reads the data attributes).
+export function bodyweightChart({ readings, avgs, plan = null, x0, x1, height = 190, label = 'Bodyweight', unit = 'kg' }) {
+  const L = 40, R = W - 10, T = 20, B = height - 24;
+  const span = Math.max(1, daysBetween(x0, x1));
+  const x = (d) => L + (R - L) * (daysBetween(x0, d) / span);
+  const vals = [...readings.map((r) => r.kg), ...avgs.map((a) => a.y)];
+  if (plan) vals.push(plan.from.y, plan.to.y);
+  if (!vals.length) return '';
+  const lo0 = Math.min(...vals), hi0 = Math.max(...vals);
+  const { lo, hi, ticks } = axisFor([lo0 - 0.1, hi0 + 0.1], { minSpan: 2, tickStep: 0.5 });
+  const y = (v) => B - (B - T) * ((v - lo) / (hi - lo));
+  let s = `<svg class="chart bw__svg" viewBox="0 0 ${W} ${height}" role="img" aria-label="${esc(label)}" data-x0="${x0}" data-span="${span}" data-l="${L}" data-r="${R}">`;
+  s += frame(height, ticks, y, tickDpFor(ticks));
+  weeklyLabels(x0, x1).forEach((d, i, a) => { s += `<text class="chart__tick" x="${x(d).toFixed(1)}" y="${height - 6}" text-anchor="${i === 0 ? 'start' : i === a.length - 1 && span - daysBetween(x0, d) < 4 ? 'end' : 'middle'}">${fmtDate(d)}</text>`; });
+  if (plan) {
+    s += `<line class="chart__target bw__plan" x1="${x(plan.from.date).toFixed(1)}" y1="${y(plan.from.y).toFixed(1)}" x2="${x(plan.to.date).toFixed(1)}" y2="${y(plan.to.y).toFixed(1)}"/>`;
+    if (plan.endsInView) { // above the line's end, or below it when a dot is in the way
+      const ex = Math.min(R, x(plan.to.date)), ey = y(plan.to.y), w = plan.label.length * 5.4;
+      const clear = (ty) => !readings.some((r) => { const dx = x(r.date), dy = y(r.kg); return dx > ex - w - 4 && dx < ex + 4 && dy > ty - 11 && dy < ty + 4; });
+      const ty = [ey - 7, ey + 15, ey - 21, ey + 29].find(clear) ?? ey - 7;
+      s += `<text class="chart__tick bw__planlabel" x="${ex.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="end">${esc(plan.label)}</text>`;
+    }
+  }
+  const segs = segmentsOf(avgs);
+  segs.forEach((seg, i) => {
+    if (i > 0) {
+      const a = segs[i - 1][segs[i - 1].length - 1], b = seg[0];
+      s += `<line class="bw__bridge" x1="${x(a.date).toFixed(1)}" y1="${y(a.y).toFixed(1)}" x2="${x(b.date).toFixed(1)}" y2="${y(b.y).toFixed(1)}"/>`;
+      if (daysBetween(a.date, b.date) > 14) s += `<text class="chart__tick bw__gap" x="${((x(a.date) + x(b.date)) / 2).toFixed(1)}" y="${(((y(a.y) + y(b.y)) / 2) + 16).toFixed(1)}" text-anchor="middle">no weigh-ins</text>`;
+    }
+    if (seg.length === 1) s += `<circle class="bw__avgdot" cx="${x(seg[0].date).toFixed(1)}" cy="${y(seg[0].y).toFixed(1)}" r="3"/>`;
+    else s += `<polyline class="chart__line bw__avg" points="${seg.map((p) => `${x(p.date).toFixed(1)},${y(p.y).toFixed(1)}`).join(' ')}"/>`;
+  });
+  for (const r of readings) s += `<circle class="bw__dot" cx="${x(r.date).toFixed(1)}" cy="${y(r.kg).toFixed(1)}" r="2.6"/>`;
+  s += `<line class="bw__cursor" x1="0" x2="0" y1="${T}" y2="${B}" visibility="hidden"/>`;
+  s += `<rect class="bw__hit" x="${L}" y="0" width="${R - L}" height="${height}" fill="transparent"/>`;
+  return s + '</svg>';
+}
+// the text a tap on `date` shows: that day's weigh-in (or "no weigh-in") and the 7-day average
+export function bodyweightTip(date, kg, avg) {
+  return `${fmtDate(date, { dow: true })}: ${isNum(kg) ? `${fmtNum(kg, 1)} kg` : 'no weigh-in'} · 7-day average ${isNum(avg) ? `${fmtNum(avg, 1)} kg` : 'not enough weigh-ins'}`;
+}
+
 // bars: [{key, label, stack: [{v, gold?, name?}]}]. tones: shade index per stack part. target: dashed horizontal line.
-export function barChart({ bars, height = 170, dp = 0, label = 'Chart', highlight = 'last', tones = [], target = null, values = false }) {
+export function barChart({ bars, height = 170, dp = 0, label = 'Chart', highlight = 'last', tones = [], target = null, values = false, yMax = null }) {
   if (!bars.length) return '';
   const totals = bars.map((b) => b.stack.reduce((a, x) => a + (isNum(x.v) ? x.v : 0), 0));
   const max = Math.max(...totals, isNum(target) ? target : 0) || 1;
   const L = 40, R = W - 10, T = 22, B = height - 22;
-  const ticks = niceTicks(0, max * 1.08);
+  const ticks = yMax != null ? niceTicks(0, yMax) : niceTicks(0, max * 1.08);
   const top = ticks[ticks.length - 1];
   const y = (v) => B - (B - T) * (v / top);
   const slot = (R - L) / bars.length;
