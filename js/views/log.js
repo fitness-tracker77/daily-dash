@@ -1,7 +1,7 @@
 import * as M from '../model.js';
 import { esc, fmtNum, fmtKg, fmtDate, today, isNum, num, haptic, isValidDate, fmtClock, parseClock, fmtPace } from '../util.js';
 import { openSheet, closeSheet, toast, ICON } from '../ui.js';
-import { bodyweightBlock, bindBodyweight, bwState, bodyweightTop } from './bwchart.js';
+import { bodyweightBlock, bindBodyweight, bodyweightTop } from './bwchart.js';
 import { head, backupBanner, NL } from './common.js';
 
 let exportRangeId = '7d';
@@ -29,7 +29,7 @@ export function renderLog(root, ctx) {
       <label class="field"><span>Weight</span><input type="text" inputmode="decimal" name="kg" placeholder="kg" aria-label="Bodyweight in kg" data-focus-key="bwkg"><em>kg</em></label>
       <button class="btn btn--gold" type="submit">Save</button>
     </form>
-    ${bw.length ? `<section class="chartblock" data-chart="bw-log">${bodyweightBlock({ range: bwState.range, chips: true })}</section>` : ''}
+    ${bw.length ? `<section class="chartblock" data-chart="bw-log">${bodyweightBlock()}</section>` : ''}
 
     <section class="entries" aria-label="Entries">
       <h2 class="h2">Entries</h2>
@@ -94,7 +94,7 @@ function entriesHTML(date) {
 }
 
 function bind(root, ctx) {
-  bindBodyweight(root, () => ctx.rerender());
+  bindBodyweight(root);
   const date = ctx.logDate;
   root.querySelector('[data-bw]').addEventListener('submit', (ev) => {
     ev.preventDefault();

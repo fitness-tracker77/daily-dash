@@ -94,7 +94,6 @@ test('private: First 1,000 kg lifted is 2026-09-24 and 10 sessions counts runs',
 
 test('Load/1RM and Bodyweight cards use a fixed last-12-weeks window; the picker starts on the most recent exercise', () => {
   assert.deepEqual(M.last12Weeks('2026-11-05'), { from: '2026-08-14', to: '2026-11-05' });
-  assert.equal(M.bodyweightView('12w', '2026-11-05').x0, '2026-08-14');
   reset(); useCycle(cyc());
   set('2026-10-01', 'squat', 0, 100); set('2026-10-20', 'bench', 0, 60); set('2026-10-10', 'row', 0, 40);
   assert.deepEqual(M.exercisesLogged().map((e) => e.ex), ['bench', 'row', 'squat']);

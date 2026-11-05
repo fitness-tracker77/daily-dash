@@ -1,59 +1,43 @@
-// The bodyweight chart block shared by Log (range chips, tall) and Insights (compact, always the last 12 weeks):
-// chart, one-line caption and the "You vs plan" panel. All numbers come from weigh-ins and cycle.json.
+// The bodyweight block shared by Log and Insights: grey dots (every weigh-in), one gold line through the weekly
+// averages, and a single "Last 4 weeks" line under the chart. Tap a weekly point or a dot to read it.
 import * as M from '../model.js';
-import { esc, fmtNum, fmtDate, fmtKg, addDays } from '../util.js';
-import { bodyweightChart, bodyweightTip } from '../charts.js';
+import { esc, fmtNum, fmtDate, fmtKg } from '../util.js';
+import { bodyweightChart } from '../charts.js';
 import { NL } from './common.js';
 
-export const bwState = { range: '3m' };
-const CHIPS = [['4w', '4 weeks'], ['3m', '3 months'], ['all', 'All']];
-
-// the big number block: the 7-day average, with the latest weigh-in under it (just the latest while there is no average)
+// big number: this week's average with the latest weigh-in under it; with no weigh-in this week, the latest
 export function bodyweightTop(sm) {
   if (!sm) return { big: null, sub: '', tag: '' };
   const latest = `latest ${fmtKg(sm.latest.kg)} kg · ${fmtDate(sm.latest.date, { dow: true })}`;
-  return sm.avg != null ? { big: fmtNum(sm.avg, 1), sub: latest, tag: '7-day average' } : { big: fmtKg(sm.latest.kg), sub: fmtDate(sm.latest.date, { dow: true }), tag: 'latest' };
+  return sm.avg != null ? { big: fmtNum(sm.avg, 1), sub: latest, tag: "this week's average" } : { big: fmtKg(sm.latest.kg), sub: fmtDate(sm.latest.date, { dow: true }), tag: 'latest' };
 }
 
-export function bodyweightBlock({ range, chips = false, compact = false }) {
-  const v = M.bodyweightView(range);
-  if (!v.readings.length) return `<p class="quiet">${NL} in this range.</p>`;
-  const vp = M.bodyweightVsPlan(v.summary);
-  const avgMap = Object.fromEntries(v.avgs.map((a) => [a.date, a.y])), kgMap = Object.fromEntries(v.readings.map((r) => [r.date, r.kg]));
+export function bodyweightBlock({ compact = false } = {}) {
+  const v = M.bodyweightView();
+  if (!v.readings.length) return `<p class="quiet">${NL} yet.</p>`;
+  if (v.readings.length < 2) return `<p class="fine"><strong>${fmtKg(v.readings[0].kg)} kg</strong> on ${fmtDate(v.readings[0].date)} · chart appears after 2 weigh-ins</p>`;
   return `
-    <div class="bw" data-bwchart data-kg="${esc(JSON.stringify(kgMap))}" data-avg="${esc(JSON.stringify(avgMap))}">
-      ${chips ? `<nav class="range range--sm" aria-label="Chart range">${CHIPS.map(([id, t]) => `<button class="range__b${id === range ? ' is-on' : ''}" data-bw-range="${id}" aria-pressed="${id === range}">${t}</button>`).join('')}</nav>` : ''}
+    <div class="bw" data-bwchart>
       <div class="bw__wrap">
-        ${bodyweightChart({ readings: v.readings, avgs: v.avgs, plan: v.plan, x0: v.x0, x1: v.x1, height: compact ? 160 : 190, label: 'Bodyweight: 7-day average, daily weigh-ins and plan' })}
+        ${bodyweightChart({ readings: v.readings, weeks: v.weeks, x0: v.x0, x1: v.x1, height: compact ? 160 : 190 })}
         <p class="bw__tip" hidden></p>
       </div>
-      <p class="fine">Gold: 7-day average. Grey: daily weigh-ins.${v.plan ? ' Dashed: plan.' : ''}</p>
-      <section class="vsplan" aria-label="You vs plan">
-        <h3 class="h3">You vs plan</h3>
-        <dl class="facts">
-          <div><dt>Rate</dt><dd>${esc(vp.rate)}</dd></div>
-          ${vp.today ? `<div><dt>Today</dt><dd>${esc(vp.today)}</dd></div>` : ''}
-        </dl>
-      </section>
+      <p class="bw__rate">${esc(M.bodyweightRateLine(v.summary))}</p>
     </div>`;
 }
 
-export function bindBodyweight(root, onRange) {
-  root.querySelectorAll('[data-bw-range]').forEach((b) => b.addEventListener('click', () => { bwState.range = b.dataset.bwRange; onRange?.(); }));
+export function bindBodyweight(root) {
   const bw = root.querySelector('[data-bwchart]');
   const svg = bw?.querySelector('.bw__svg');
   if (!svg) return;
-  const kg = JSON.parse(bw.dataset.kg), avg = JSON.parse(bw.dataset.avg);
-  const tip = bw.querySelector('.bw__tip'), cur = svg.querySelector('.bw__cursor');
-  const x0 = svg.dataset.x0, span = Number(svg.dataset.span), L = Number(svg.dataset.l), R = Number(svg.dataset.r);
-  svg.querySelector('.bw__hit').addEventListener('click', (e) => {
-    const rect = svg.getBoundingClientRect();
-    const vx = ((e.clientX - rect.left) / rect.width) * 340;
-    const day = Math.max(0, Math.min(span, Math.round(((vx - L) / (R - L)) * span)));
-    const date = addDays(x0, day);
-    const x = L + (R - L) * (day / span);
-    cur.setAttribute('x1', x.toFixed(1)); cur.setAttribute('x2', x.toFixed(1)); cur.setAttribute('visibility', 'visible');
-    tip.textContent = bodyweightTip(date, kg[date], avg[date]);
-    tip.hidden = false;
+  const hit = svg.querySelector('.bw__hit'), tip = bw.querySelector('.bw__tip');
+  const pts = JSON.parse(hit.dataset.pts);
+  hit.addEventListener('click', (e) => {
+    const r = svg.getBoundingClientRect();
+    const vx = ((e.clientX - r.left) / r.width) * 340, vy = ((e.clientY - r.top) / r.height) * Number(svg.viewBox.baseVal.height);
+    let best = null;
+    for (const p of pts) { const d = Math.hypot(p.x - vx, p.y - vy) - (p.t === 'w' ? 3 : 0); if (d <= 14 && (!best || d < best.d)) best = { d, p }; } // weekly points win near ties
+    if (!best) { tip.hidden = true; return; }
+    tip.textContent = best.p.tip; tip.hidden = false;
   });
 }

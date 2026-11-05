@@ -1,6 +1,6 @@
 // Charts drawn as SVG by hand, one visual language everywhere:
 // gold line with a soft fill, faint guide lines, rounded bars, one highlighted value.
-import { esc, fmtNum, isNum, daysBetween, fmtDate, addDays } from './util.js';
+import { esc, fmtNum, isNum, daysBetween, fmtDate, addDays, today as isoToday } from './util.js';
 
 const W = 340;
 let gid = 0;
@@ -77,12 +77,16 @@ function frame(height, ticks, y, dp) {
 }
 
 // points: [{date, y, mark?: 'pr' | 'above' | 'below' | 'on'}]; target: {from:{date,y}, to:{date,y}}; hLine: horizontal target
-export function lineChart({ points, target = null, hLine = null, x0 = null, x1 = null, highlight = 'last', unit = '', dp = 1, height = 170, label = 'Chart', tickDp = null, minSpan = null, tickStep = null, avg = null, joinPoints = true }) {
+export function lineChart({ points, target = null, hLine = null, x0 = null, x1 = null, highlight = 'last', unit = '', dp = 1, height = 170, label = 'Chart', tickDp = null, minSpan = null, tickStep = null, avg = null, joinPoints = true, solo = 'chart appears after 2 sessions' }) {
   const pts = points.filter((p) => isNum(p.y));
   if (!pts.length && !target) return '';
+  if (pts.length === 1 && !avg && solo) return `<p class="fine"><strong>${fmtNum(pts[0].y, dp)}${unit && unit.length <= 4 ? ` ${esc(unit)}` : ''}</strong> on ${fmtDate(pts[0].date)} · ${esc(solo)}</p>`;
   const id = `g${++gid}`;
   const dates = [...pts.map((p) => p.date), ...(target ? [target.from.date, target.to.date] : [])].sort();
-  const d0 = x0 || dates[0], d1 = x1 || dates[dates.length - 1];
+  // starts at the first logged point inside the window and ends today (or the window's end, if that is earlier)
+  const firstPt = pts.length ? pts.map((p) => p.date).sort()[0] : null;
+  const d0 = x0 ? (firstPt && firstPt > x0 ? firstPt : x0) : dates[0];
+  const d1 = x1 ? (x1 > isoToday() ? (isoToday() > d0 ? isoToday() : d0) : x1) : dates[dates.length - 1];
   const span = Math.max(1, daysBetween(d0, d1));
   const L = 40, R = W - 10, T = 22, B = height - 22;
   const x = (d) => L + (R - L) * (daysBetween(d0, d) / span);
@@ -136,54 +140,43 @@ export function lineChart({ points, target = null, hLine = null, x0 = null, x1 =
   return s + '</svg>';
 }
 
-// Bodyweight: gold line = 7-day average (a faint dotted bridge across days with no average, "no weigh-ins" over
-// gaps wider than 14 days), one grey dot per weigh-in with no line joining them, a thin dashed plan line over the
-// cycle's dates with an end label, no shaded area. Y axis: even 0.5 kg steps, at least 2.0 kg tall, every dot inside.
-// Tap a point to see that day's weigh-in and average (bindBodyweightChart reads the data attributes).
-export function bodyweightChart({ readings, avgs, plan = null, x0, x1, height = 190, label = 'Bodyweight', unit = 'kg' }) {
+// Bodyweight: one small grey dot per weigh-in (no line joining them) and ONE gold line through the weekly averages
+// (Monday-Sunday mean, one point per week with weigh-ins, placed mid-week; weeks without weigh-ins are skipped and
+// the line joins the neighbouring weeks). X axis: first weigh-in to today. Y axis: even 0.5 kg steps, at least 2.0 kg
+// tall, every dot inside. Tap targets are listed in data-pts (bodyweightChart output) for bindBodyweight.
+export function weekTip(w) {
+  return `Week of ${fmtDate(w.week)} · ${w.kgs.map((k) => fmtNum(k, 1)).join(', ')} → average ${w.avg.toFixed(2)} kg`;
+}
+export const dotTip = (date, kg) => `${fmtDate(date, { dow: true })}: ${fmtNum(kg, 1)} kg`;
+export function bodyweightChart({ readings, weeks, x0, x1, height = 190, label = 'Bodyweight' }) {
+  if (!readings.length) return '';
   const L = 40, R = W - 10, T = 20, B = height - 24;
   const span = Math.max(1, daysBetween(x0, x1));
-  const x = (d) => L + (R - L) * (daysBetween(x0, d) / span);
-  const vals = [...readings.map((r) => r.kg), ...avgs.map((a) => a.y)];
-  if (plan) vals.push(plan.from.y, plan.to.y);
-  if (!vals.length) return '';
-  const lo0 = Math.min(...vals), hi0 = Math.max(...vals);
-  const { lo, hi, ticks } = axisFor([lo0 - 0.1, hi0 + 0.1], { minSpan: 2, tickStep: 0.5 });
+  const x = (d) => L + (R - L) * (Math.min(daysBetween(x0, d), span) / span);
+  const vals = [...readings.map((r) => r.kg), ...weeks.map((w) => w.avg)];
+  const { lo, hi, ticks } = axisFor([Math.min(...vals) - 0.1, Math.max(...vals) + 0.1], { minSpan: 2, tickStep: 0.5 });
   const y = (v) => B - (B - T) * ((v - lo) / (hi - lo));
-  let s = `<svg class="chart bw__svg" viewBox="0 0 ${W} ${height}" role="img" aria-label="${esc(label)}" data-x0="${x0}" data-span="${span}" data-l="${L}" data-r="${R}">`;
+  const pts = [];
+  let s = `<svg class="chart bw__svg" viewBox="0 0 ${W} ${height}" role="img" aria-label="${esc(label)}">`;
   s += frame(height, ticks, y, tickDpFor(ticks));
-  weeklyLabels(x0, x1).forEach((d, i, a) => { s += `<text class="chart__tick" x="${x(d).toFixed(1)}" y="${height - 6}" text-anchor="${i === 0 ? 'start' : i === a.length - 1 && span - daysBetween(x0, d) < 4 ? 'end' : 'middle'}">${fmtDate(d)}</text>`; });
-  if (plan) {
-    s += `<line class="chart__target bw__plan" x1="${x(plan.from.date).toFixed(1)}" y1="${y(plan.from.y).toFixed(1)}" x2="${x(plan.to.date).toFixed(1)}" y2="${y(plan.to.y).toFixed(1)}"/>`;
-    if (plan.endsInView) { // above the line's end, or below it when a dot is in the way
-      const ex = Math.min(R, x(plan.to.date)), ey = y(plan.to.y), w = plan.label.length * 5.4;
-      const clear = (ty) => !readings.some((r) => { const dx = x(r.date), dy = y(r.kg); return dx > ex - w - 4 && dx < ex + 4 && dy > ty - 11 && dy < ty + 4; });
-      const ty = [ey - 7, ey + 15, ey - 21, ey + 29].find(clear) ?? ey - 7;
-      s += `<text class="chart__tick bw__planlabel" x="${ex.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="end">${esc(plan.label)}</text>`;
-    }
-  }
-  const segs = segmentsOf(avgs);
-  segs.forEach((seg, i) => {
-    if (i > 0) {
-      const a = segs[i - 1][segs[i - 1].length - 1], b = seg[0];
-      s += `<line class="bw__bridge" x1="${x(a.date).toFixed(1)}" y1="${y(a.y).toFixed(1)}" x2="${x(b.date).toFixed(1)}" y2="${y(b.y).toFixed(1)}"/>`;
-      if (daysBetween(a.date, b.date) > 14) s += `<text class="chart__tick bw__gap" x="${((x(a.date) + x(b.date)) / 2).toFixed(1)}" y="${(((y(a.y) + y(b.y)) / 2) + 16).toFixed(1)}" text-anchor="middle">no weigh-ins</text>`;
-    }
-    if (seg.length === 1) s += `<circle class="bw__avgdot" cx="${x(seg[0].date).toFixed(1)}" cy="${y(seg[0].y).toFixed(1)}" r="3"/>`;
-    else s += `<polyline class="chart__line bw__avg" points="${seg.map((p) => `${x(p.date).toFixed(1)},${y(p.y).toFixed(1)}`).join(' ')}"/>`;
-  });
-  for (const r of readings) s += `<circle class="bw__dot" cx="${x(r.date).toFixed(1)}" cy="${y(r.kg).toFixed(1)}" r="2.6"/>`;
-  s += `<line class="bw__cursor" x1="0" x2="0" y1="${T}" y2="${B}" visibility="hidden"/>`;
-  s += `<rect class="bw__hit" x="${L}" y="0" width="${R - L}" height="${height}" fill="transparent"/>`;
+  weeklyLabels(x0, x1, 6).forEach((d, i, a) => { s += `<text class="chart__tick" x="${x(d).toFixed(1)}" y="${height - 6}" text-anchor="${i === 0 ? 'start' : i === a.length - 1 && span - daysBetween(x0, d) < 4 ? 'end' : 'middle'}">${fmtDate(d)}</text>`; });
+  for (const r of readings) { const cx = x(r.date), cy = y(r.kg); s += `<circle class="bw__dot" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="2.6"/>`; pts.push({ t: 'd', x: +cx.toFixed(1), y: +cy.toFixed(1), tip: dotTip(r.date, r.kg) }); }
+  const wp = weeks.map((w) => ({ w, cx: x(w.mid), cy: y(w.avg) }));
+  if (wp.length > 1) s += `<polyline class="chart__line bw__avg" points="${wp.map((p) => `${p.cx.toFixed(1)},${p.cy.toFixed(1)}`).join(' ')}"/>`;
+  for (const p of wp) { s += `<circle class="bw__avgdot" cx="${p.cx.toFixed(1)}" cy="${p.cy.toFixed(1)}" r="3.4"/>`; pts.push({ t: 'w', x: +p.cx.toFixed(1), y: +p.cy.toFixed(1), tip: weekTip(p.w) }); }
+  s += `<rect class="bw__hit" x="0" y="0" width="${W}" height="${height}" fill="transparent" data-pts="${esc(JSON.stringify(pts))}"/>`;
   return s + '</svg>';
-}
-// the text a tap on `date` shows: that day's weigh-in (or "no weigh-in") and the 7-day average
-export function bodyweightTip(date, kg, avg) {
-  return `${fmtDate(date, { dow: true })}: ${isNum(kg) ? `${fmtNum(kg, 1)} kg` : 'no weigh-in'} · 7-day average ${isNum(avg) ? `${fmtNum(avg, 1)} kg` : 'not enough weigh-ins'}`;
 }
 
 // bars: [{key, label, stack: [{v, gold?, name?}]}]. tones: shade index per stack part. target: dashed horizontal line.
-export function barChart({ bars, height = 170, dp = 0, label = 'Chart', highlight = 'last', tones = [], target = null, values = false, yMax = null }) {
+export function barChart({ bars: allBars, height = 170, dp = 0, label = 'Chart', highlight = 'last', tones = [], target = null, values = false, yMax = null, trim = false }) {
+  let bars = allBars;
+  if (trim) { // start at the first week with data, end at the current week (no empty leading or future weeks)
+    const now = isoToday();
+    const has = (b) => b.stack.some((p) => isNum(p.v) && p.v > 0);
+    const first = bars.findIndex(has);
+    bars = bars.filter((b, i) => i >= Math.max(0, first) && String(b.key) <= now);
+  }
   if (!bars.length) return '';
   const totals = bars.map((b) => b.stack.reduce((a, x) => a + (isNum(x.v) ? x.v : 0), 0));
   const max = Math.max(...totals, isNum(target) ? target : 0) || 1;

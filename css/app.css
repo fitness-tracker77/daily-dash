@@ -511,3 +511,4 @@ body.has-rest .toast { bottom: calc(var(--tabbar) + var(--safe-b) + 84px); }
 .bw__tip { margin: 6px 0 0; padding: 8px 10px; border-radius: var(--radius); background: var(--press); font-size: 13px; }
 .vsplan { margin-top: 12px; padding-top: 4px; border-top: 1px solid var(--line); }
 .vsplan .facts dd { text-align: right; max-width: 70%; }
+.bw__rate { margin: 8px 0 0; font-size: 14px; color: var(--text); }

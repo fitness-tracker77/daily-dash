@@ -67,7 +67,7 @@ function muscleBlock(from, to, per) {
       <h2 class="h2">Weekly volume by muscle group</h2>
       <nav class="range range--sm" aria-label="Measure">${[['sets', 'Sets'], ['kg', 'kg']].map(([id, t]) => `<button class="range__b${id === mv.measure ? ' is-on' : ''}" data-measure="${id}" aria-pressed="${id === mv.measure}">${t}</button>`).join('')}</nav>
       ${total ? `<p class="chartblock__key">${mv.headline}</p>
-        ${barChart({ bars, label, tones: toneList })}
+        ${barChart({ bars, label, tones: toneList, trim: true })}
         <div class="split">
           ${donut({ segments: [...(pr ? [{ label: pr, v: totals.get(pr), gold: true }] : []), ...order.map((g) => ({ label: g, v: totals.get(g) }))], tones: toneList, size: 132, center: pr ? `${Math.round((totals.get(pr) / total) * 100)}%` : `${mv.groups.length}`, sub: pr ? esc(pr) : 'groups', label: `Share of ${unit} by muscle group` })}
           <ul class="legend">${[...(pr ? [pr] : []), ...order].map((g) => `<li class="${g === pr ? 'is-gold' : `tone-${tones[g]}`}"><span class="legend__sw"></span>${esc(cap(g))}${g === UNGROUPED ? ' <small>(no muscle_group in cycle.json)</small>' : ''}<span class="legend__v">${fmtNum(totals.get(g))} ${unit === 'sets' && totals.get(g) === 1 ? 'set' : unit} <small>${Math.round((totals.get(g) / total) * 100)}%</small></span></li>`).join('')}</ul>
@@ -85,7 +85,7 @@ function setsBlock(from, to) {
     <section class="chartblock" data-chart="sets" data-from="${from}" data-to="${to}">
       <h2 class="h2">Sets per week</h2>
       ${total ? `<p class="chartblock__key">${fmtNum(total)} sets <small>${fmtNum(sum(weeks.map((w) => w.reps)))} reps in this range</small></p>
-        ${barChart({ bars: weeks.map((w) => ({ key: w.week, label: fmtDate(w.week), stack: [{ v: w.sets, name: 'sets' }] })), label: 'Sets per week', values: weeks.length <= 8 })}`
+        ${barChart({ bars: weeks.map((w) => ({ key: w.week, label: fmtDate(w.week), stack: [{ v: w.sets, name: 'sets' }] })), trim: true, label: 'Sets per week', values: weeks.length <= 8 })}`
       : `<p class="quiet">${NL}: no sets ticked in this range.</p>`}
     </section>`;
 }
@@ -112,7 +112,7 @@ function adherenceBlock(from, to) {
       <h2 class="h2">Plan followed</h2>
       ${(() => { const cp = M.cyclePosition(); return cp ? `<p class="fine">Day ${cp.day} of ${cp.of} of the cycle</p>` : ''; })()}
       <p class="chartblock__key">${Math.round((done / planned) * 100)}% <small>${done} of ${planned} planned meals, sets and runs ticked</small></p>
-      ${barChart({ bars: weeks.map((w) => ({ key: w.week, label: fmtDate(w.week), stack: [{ v: Math.round(w.pct), name: '%' }] })), label: 'Share of the plan done per week', values: weeks.length <= 8, yMax: 100 })}
+      ${barChart({ bars: weeks.map((w) => ({ key: w.week, label: fmtDate(w.week), stack: [{ v: Math.round(w.pct), name: '%' }] })), label: 'Share of the plan done per week', values: weeks.length <= 8, yMax: 100, trim: true })}
       <p class="fine">Past days count everything planned; today counts only what you've ticked.</p>
     </section>`;
 }
@@ -141,18 +141,16 @@ function exerciseBlock() {
 
 // ---------------------------------------------------------------- bodyweight against the target path
 function bodyweightBlock() {
-  // always the last 12 weeks, whatever period is selected above
   const bw = M.bodyweights();
   const top = bodyweightTop(M.bodyweightSummary(bw));
   return `
     <section class="chartblock" data-chart="bodyweight">
-      <h2 class="h2">Bodyweight <small>last 12 weeks</small></h2>
-      ${bw.length ? `<p class="chartblock__key">${top.big} kg <small>${top.tag}${top.tag === 'latest' ? '' : ''} · ${esc(top.sub)}</small></p>
-        ${bodyweightBlock12()}
+      <h2 class="h2">Bodyweight</h2>
+      ${bw.length ? `<p class="chartblock__key">${top.big} kg <small>${esc(top.tag)} · ${esc(top.sub)}</small></p>
+        ${bwBlock({ compact: true })}
         <button class="link" data-more="bodyweight">All entries</button>` : `<p class="quiet">${NL} yet.</p>`}
     </section>`;
 }
-const bodyweightBlock12 = () => bwBlock({ range: '12w', compact: true });
 
 // ---------------------------------------------------------------- kcal and protein against targets
 function nutritionBlock(from, to, C) {
@@ -166,9 +164,9 @@ function nutritionBlock(from, to, C) {
     <section class="chartblock" data-chart="nutrition" data-from="${from}" data-to="${to}">
       <h2 class="h2">Energy and protein</h2>
       <p class="chartblock__key">${fmtNum(avgK)} kcal <small>average over ${days.length} completed day${days.length === 1 ? '' : 's'} with logged meals${C.kcalTarget != null ? `, target ${fmtNum(C.kcalTarget)}` : ''}</small></p>
-      ${lineChart({ points: days.map((d) => ({ date: d.date, y: d.kcal })), hLine: C.kcalTarget, x0: from, x1: to, dp: 0, unit: 'kcal', label: 'kcal per day' })}
+      ${lineChart({ points: days.map((d) => ({ date: d.date, y: d.kcal })), hLine: C.kcalTarget, x0: from, x1: to, dp: 0, unit: 'kcal', solo: 'chart appears after 2 days', label: 'kcal per day' })}
       <p class="chartblock__key">${fmtNum(avgP, 1)} g <small>protein average${C.proteinTarget != null ? `, target ${fmtNum(C.proteinTarget)} g` : ''}</small></p>
-      ${lineChart({ points: days.map((d) => ({ date: d.date, y: d.protein })), hLine: C.proteinTarget, x0: from, x1: to, dp: 0, unit: 'g', label: 'Protein per day' })}
+      ${lineChart({ points: days.map((d) => ({ date: d.date, y: d.protein })), hLine: C.proteinTarget, x0: from, x1: to, dp: 0, unit: 'g', solo: 'chart appears after 2 days', label: 'Protein per day' })}
       ${(() => { const p = M.proteinTargetDays(from, to); return p ? `<p class="chartblock__key">${p.hit} of ${p.of} <small>completed days reached the ${fmtNum(p.target)} g protein target</small></p>` : ''; })()}
       ${sofarLine}
       <p class="fine">Only completed days with at least one ticked meal. Dashed: the daily target.</p>
@@ -184,7 +182,7 @@ function runBlock(from, to) {
     <section class="chartblock" data-chart="runs" data-from="${from}" data-to="${to}">
       <h2 class="h2">Weekly run distance</h2>
       ${count ? `<p class="chartblock__key">${fmtKg(total)} km <small>${count} run${count === 1 ? '' : 's'}</small></p>
-        ${barChart({ bars: weeks.map((w) => ({ key: w.week, label: fmtDate(w.week), stack: [{ v: w.km, name: 'km' }] })), dp: 1, label: 'Kilometres per week' })}`
+        ${barChart({ bars: weeks.map((w) => ({ key: w.week, label: fmtDate(w.week), stack: [{ v: w.km, name: 'km' }] })), dp: 1, trim: true, label: 'Kilometres per week' })}`
       : `<p class="quiet">${NL}: no runs in this range.</p>`}
     </section>`;
 }
@@ -236,7 +234,7 @@ function reviewBlock(from, to) {
         ${row('Sessions <small>incl. runs</small>', nl(r.sessions, (v) => fmtNum(v)))}
         ${row('Total volume', nl(r.volume, (v) => `${fmtNum(v)} kg`))}
         ${row('PRs', nl(r.prs, (v) => fmtNum(v)))}
-        ${row('Weight change', r.bwChange ? `${r.bwChange.diff > 0 ? '+' : ''}${fmtNum(r.bwChange.diff, 1)} kg <small>${fmtDate(r.bwChange.from.date)} to ${fmtDate(r.bwChange.to.date)}</small>` : `${NL}${r.bwCount === 1 ? ' <small>(one weigh-in)</small>' : ''}`)}
+        ${row('Weight change', r.bwChange ? `${r.bwChange.diff > 0 ? '+' : ''}${fmtNum(r.bwChange.diff, 1)} kg <small>weekly averages, ${fmtNum(r.bwChange.from.y, 1)} to ${fmtNum(r.bwChange.to.y, 1)}</small>` : `${NL}${r.bwCount === 1 ? ' <small>(one weekly average)</small>' : ''}`)}
         ${row('Average kcal', nl(r.kcalAvg, (v) => `${fmtNum(v)} <small>over ${r.mealDays} completed day${r.mealDays === 1 ? '' : 's'}</small>`))}
         ${row('Average protein', nl(r.proteinAvg, (v) => `${fmtNum(v, 1)} g`))}
         ${r.todaySoFar ? row('Today so far', `${fmtNum(r.todaySoFar.kcal)} kcal, ${fmtNum(r.todaySoFar.protein, 1)} g protein`) : ''}

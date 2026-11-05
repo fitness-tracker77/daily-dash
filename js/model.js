@@ -685,63 +685,34 @@ export function addBodyweight(date, kg) {
 }
 export function deleteBodyweight(key) { store.del('bodyweight', key); }
 export const bodyweights = () => cached('bw', () => store.values('bodyweight').filter((b) => isValidDate(b.date) && isNum(b.kg)).sort((a, b) => (a.date < b.date ? -1 : 1)));
-// 7-day average as of a date: the mean of the readings in the 7 calendar days up to and including it, only with
-// at least 3 readings. null otherwise; nothing is interpolated.
-export function bodyweightAvgAt(list, date) {
-  const from = addDays(date, -6);
-  const win = list.filter((x) => x.date >= from && x.date <= date);
-  return win.length >= 3 ? { date, y: sum(win.map((x) => x.kg)) / win.length, n: win.length } : null;
-}
-// the average for every calendar day from the first weigh-in through `through` (default: the last weigh-in);
-// days without an average are absent (the chart bridges them with a faint dotted line)
-export function bodyweightAverages(list = bodyweights(), through = null) {
-  if (!list.length) return [];
-  const end = through && through > list[list.length - 1].date ? through : list[list.length - 1].date;
-  return dateRange(list[0].date, end).map((d) => bodyweightAvgAt(list, d)).filter(Boolean);
+// Weekly averages: one point per Monday-Sunday week that has weigh-ins (mean of that week's readings), placed
+// mid-week (Thursday). Weeks with no weigh-in are skipped; nothing is interpolated.
+export function bodyweightWeeks(list = bodyweights()) {
+  const by = new Map();
+  for (const b of list) { const w = weekStart(b.date); if (!by.has(w)) by.set(w, []); by.get(w).push(b); }
+  return [...by.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([week, rs]) => ({ week, mid: addDays(week, 3), kgs: rs.map((r) => r.kg), avg: sum(rs.map((r) => r.kg)) / rs.length }));
 }
 const planSlope = () => { const p = targetPath(); return p && p.end > p.start ? (p.to - p.from) / (daysBetween(p.start, p.end) / 7) : null; };
-// the numbers above and under the bodyweight chart: average now (as of `asOf`), latest reading, the 4-week rate
-// ((average now - average 28 days earlier) / 4) and the plan's own rate per week
+// the numbers around the chart: this week's average (null with no weigh-in this week), the latest reading, and the
+// 4-week rate ((this week's average - the average 4 weeks earlier) / 4) with the plan's own slope per week
 export function bodyweightSummary(list = bodyweights(), asOf = today()) {
   const latest = list[list.length - 1] || null;
   if (!latest) return null;
-  const now = bodyweightAvgAt(list, asOf), then = bodyweightAvgAt(list, addDays(asOf, -28));
-  const p = targetPath();
-  const planToday = p ? p.at(asOf) : null;
-  return { latest, avg: now ? now.y : null, rate: now && then ? (now.y - then.y) / 4 : null, pathRate: planSlope(), planToday, asOf };
+  const weeks = new Map(bodyweightWeeks(list).map((w) => [w.week, w.avg]));
+  const w0 = weekStart(asOf);
+  const now = weeks.get(w0) ?? null, then = weeks.get(addDays(w0, -28)) ?? null;
+  return { latest, avg: now, rate: now != null && then != null ? (now - then) / 4 : null, pathRate: planSlope(), asOf };
 }
-const fx2 = (v) => `${v < 0 ? '−' : '+'}${Math.abs(v).toFixed(2)}`;
-// the two rows of "You vs plan"
-export function bodyweightVsPlan(sm) {
-  if (!sm) return { rate: 'not enough weigh-ins yet', today: null };
-  const rate = sm.rate == null ? 'not enough weigh-ins yet'
-    : `${fx2(sm.rate)} kg/week over the last 4 weeks${sm.pathRate != null ? ` · plan ${Math.abs(sm.pathRate).toFixed(2)} kg/week` : ''}`;
-  let todayRow = null;
-  if (sm.planToday != null) {
-    const diff = sm.avg != null ? sm.avg - sm.planToday : null;
-    todayRow = sm.avg == null ? `plan ${sm.planToday.toFixed(2)} kg · not enough weigh-ins yet`
-      : `7-day average ${sm.avg.toFixed(1)} kg · plan ${sm.planToday.toFixed(2)} kg · ${Math.abs(diff) < 0.05 ? 'on the plan' : `${Math.abs(diff).toFixed(1)} kg ${diff > 0 ? 'above' : 'below'}`}`;
-  }
-  return { rate, today: todayRow };
+const sg2 = (v) => `${v < 0 ? '−' : '+'}${Math.abs(v).toFixed(2)}`;
+// "Last 4 weeks: +0.25 kg/week · plan +0.35 kg/week"
+export function bodyweightRateLine(sm) {
+  if (!sm || sm.rate == null) return 'Last 4 weeks: not enough weigh-ins yet';
+  return `Last 4 weeks: ${sg2(sm.rate)} kg/week${sm.pathRate != null ? ` · plan ${sg2(sm.pathRate)} kg/week` : ''}`;
 }
-// everything the chart needs for one range ('4w' | '3m' | 'all' | '12w'), ending today (or at the plan's end if later)
-export function bodyweightView(range = '3m', now = today()) {
-  const all = bodyweights();
-  const p = targetPath();
-  const x1 = p && p.end > now ? p.end : now;
-  let x0;
-  if (range === '4w') x0 = addDays(now, -27);
-  else if (range === '12w') x0 = addDays(now, -83);
-  else if (range === 'all') x0 = all[0] && all[0].date < now ? all[0].date : addDays(now, -27);
-  else x0 = addDays(addMonths(now, -3), 1);
-  const readings = all.filter((b) => b.date >= x0 && b.date <= x1);
-  const avgs = bodyweightAverages(all, now).filter((a) => a.date >= x0 && a.date <= x1);
-  let plan = null;
-  if (p) {
-    const a = x0 > p.start ? x0 : p.start, b = x1 < p.end ? x1 : p.end;
-    if (a <= b) plan = { from: { date: a, y: p.at(a) }, to: { date: b, y: p.at(b) }, endsInView: p.end <= x1, label: `plan ${p.to.toFixed(2)} kg, ${fmtDate(p.end)}` };
-  }
-  return { range, x0, x1, readings, avgs, plan, summary: bodyweightSummary(all, now), all };
+// the chart's data: every weigh-in from the first one to today, plus the weekly averages
+export function bodyweightView(now = today()) {
+  const readings = bodyweights();
+  return { x0: readings[0] ? readings[0].date : now, x1: now, readings, weeks: bodyweightWeeks(readings), summary: bodyweightSummary(readings, now) };
 }
 export function latestBodyweight() { const b = bodyweights(); return b.length ? b[b.length - 1] : null; }
 // straight path from bodyweight_start_kg on start_date to bodyweight_target_kg on end_date
@@ -1125,6 +1096,7 @@ export function monthReview(mk) {
   const lifted = days.filter((r) => r.sets > 0);
   const done = days.filter((r) => r.meals > 0 && r.start < t); // today is left out of the averages until it is over
   const bw = bodyweights().filter((b) => monthKey(b.date) === mk);
+  const wk = bodyweightWeeks().filter((w) => monthKey(w.mid) === mk); // weeks whose middle falls in the month
   const runs = store.values('runs').filter((x) => monthKey(x.date) === mk);
   const sofar = monthKey(t) === mk ? todaySoFar() : null;
   return {
@@ -1132,8 +1104,9 @@ export function monthReview(mk) {
     sessions: days.some((r) => r.sets > 0 || r.runs > 0) ? sum(days.map((r) => (r.sets > 0 ? 1 : 0) + r.runs)) : null, // lifting days + runs
     volume: lifted.length ? sum(lifted.map((r) => r.volume)) : null,
     prs: lifted.length ? sum(lifted.map((r) => r.prs)) : null,
-    bwChange: bw.length >= 2 ? { from: bw[0], to: bw[bw.length - 1], diff: bw[bw.length - 1].kg - bw[0].kg } : null,
-    bwCount: bw.length,
+    // first and last weekly averages of the month (not single readings)
+    bwChange: wk.length >= 2 ? { from: { date: wk[0].mid, y: wk[0].avg }, to: { date: wk[wk.length - 1].mid, y: wk[wk.length - 1].avg }, diff: wk[wk.length - 1].avg - wk[0].avg } : null,
+    bwCount: wk.length,
     kcalAvg: done.length ? sum(done.map((r) => r.kcal)) / done.length : null,
     proteinAvg: done.length ? sum(done.map((r) => r.protein)) / done.length : null,
     mealDays: done.length,
@@ -1228,11 +1201,9 @@ export function weekRecap(date) {
   const t = today();
   const meals = rows.filter((r) => r.meals > 0 && r.start < t); // today is left out until it is over
   const tgt = C?.proteinTarget;
-  // weight change of the 7-day average: latest average this week against the one 7 days before it
-  const avgs = bodyweightAverages();
-  const inWeek = avgs.filter((a) => a.date >= from && a.date <= date);
-  const nowAvg = inWeek[inWeek.length - 1] || null;
-  const thenAvg = nowAvg ? avgs.find((a) => a.date === addDays(nowAvg.date, -7)) || null : null;
+  // weight change: this week's average against last week's (weekly averages of the weigh-ins)
+  const wks = new Map(bodyweightWeeks().map((w) => [w.week, w.avg]));
+  const nowAvg = wks.get(from) ?? null, thenAvg = wks.get(addDays(from, -7)) ?? null;
   return {
     from, to: date,
     completed: plannedDays.filter((d) => progress(d).complete).length, plannedDays: plannedDays.length,
@@ -1245,7 +1216,7 @@ export function weekRecap(date) {
     sets: lifted.length ? sum(lifted.map((r) => r.sets)) : null,
     volume: lifted.length ? sum(lifted.map((r) => r.volume)) : null,
     prs: lifted.length ? sum(lifted.map((r) => r.prs)) : null,
-    weightAvgChange: nowAvg && thenAvg ? { diff: nowAvg.y - thenAvg.y, now: nowAvg.y, then: thenAvg.y } : null,
+    weightAvgChange: nowAvg != null && thenAvg != null ? { diff: nowAvg - thenAvg, now: nowAvg, then: thenAvg } : null,
   };
 }
 
