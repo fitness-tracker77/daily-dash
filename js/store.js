@@ -5,8 +5,8 @@
 // Collections (object stores, keyPath "key"):
 //   meals         `${date}|${slotKey}`     what you ticked, with the grams eaten and the numbers at that moment
 //   grams         `${date}|${slotKey}`     grams typed for a meal (before or after ticking)
-//   sets          `${date}|${exKey}|${i}`  one row per set: reps, kg, done
-//   exlog         `${date}|${exKey}`       effort 1-10 and note for an exercise on a date
+//   sets          `${date}|@${pos}|${i}`   one row per set (pos = card position in that day's session; also holds ex id): reps, kg, done
+//   exlog         `${date}|@${pos}`        effort 1-10 and note for one exercise card on a date (also holds ex id)
 //   runs          `${date}|run`            distance, time, notes
 //   bodyweight    `${date}`                weigh-ins
 //   pantry        `${item_id}`             running pantry quantity and its counted/calculated label

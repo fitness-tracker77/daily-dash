@@ -277,12 +277,15 @@ export function shoppingList() {
 // ======================================================================
 // TRAINING
 // ======================================================================
-export const setKeyOf = (date, ex, i) => `${date}|${exKey(ex)}|${i}`;
+// Keys use the card's position in that day's session, so the same exercise listed twice has separate sets.
+// (Old keys were `${date}|${exId}|${i}`; migratePositionKeys moves them. History always groups by the `ex` id on the record.)
+export const setKeyOf = (date, ex, i) => `${date}|@${ex.pos ?? 0}|${i}`;
+const exlogKeyOf = (date, ex) => `${date}|@${ex.pos ?? 0}`;
 export const setRec = (date, ex, i) => store.get('sets', setKeyOf(date, ex, i));
 const muscleFor = (ex) => ex.muscle ?? C?.muscleOf.get(exKey(ex)) ?? null;
 
 function baseSet(date, ex, i) {
-  return setRec(date, ex, i) || { key: setKeyOf(date, ex, i), date, ex: exKey(ex), name: ex.name, muscle: muscleFor(ex), idx: i, done: false, reps: null, load: null, ts: 0 };
+  return setRec(date, ex, i) || { key: setKeyOf(date, ex, i), date, pos: ex.pos ?? 0, ex: exKey(ex), name: ex.name, muscle: muscleFor(ex), idx: i, done: false, reps: null, load: null, ts: 0 };
 }
 export function setDraft(date, ex, i, field, value) {
   const r = { ...baseSet(date, ex, i) };
@@ -382,13 +385,58 @@ export function prefill(date, ex, i) {
 }
 
 // effort (1-10) and a note per exercise per date
-export const exLog = (date, ex) => store.get('exlog', `${date}|${exKey(ex)}`);
-export function setExLog(date, ex, patch) {
-  const key = `${date}|${exKey(ex)}`;
-  const cur = store.get('exlog', key) || { key, date, ex: exKey(ex), name: ex.name, effort: null, note: '' };
+export const exLog = (date, ex) => store.get('exlog', exlogKeyOf(date, ex));
+function writeExLog(key, cur, patch) {
   const next = { ...cur, ...patch, ts: Date.now() };
   if (!isNum(next.effort) && !String(next.note || '').trim()) store.del('exlog', key);
   else store.put('exlog', next);
+}
+export function setExLog(date, ex, patch) {
+  const key = exlogKeyOf(date, ex);
+  writeExLog(key, store.get('exlog', key) || { key, date, pos: ex.pos ?? 0, ex: exKey(ex), name: ex.name, effort: null, note: '' }, patch);
+}
+export function editExLog(key, patch) { const cur = store.get('exlog', key); if (cur) writeExLog(key, cur, patch); }
+// effort and notes for one exercise id on a date, across all its cards (last effort written wins; notes joined)
+export function exLogFor(date, id) {
+  const rows = store.values('exlog').filter((r) => r.date === date && r.ex === id).sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  if (!rows.length) return null;
+  const eff = rows.filter((r) => isNum(r.effort)).pop();
+  return { effort: eff ? eff.effort : null, note: rows.map((r) => String(r.note || '').trim()).filter(Boolean).join(' · ') };
+}
+
+// One-time, re-runnable: move old `date|exId|i` sets and `date|exId` exlog rows to the FIRST card with that
+// exercise id in that date's session. A row with no matching card keeps its old key and its data.
+const OLD_KEY = (k) => !/^\d{4}-\d\d-\d\d\|@/.test(String(k));
+export function migratePositionKeys() {
+  const out = { sets: 0, exlog: 0, unmatched: 0 };
+  if (!C || C.isExample) return out;
+  const firstPos = (date, id) => { const ses = C.session(date); const c = ses?.exercises?.find((e) => exKey(e) === id); return c ? c.pos : null; };
+  for (const r of store.values('sets')) {
+    if (!OLD_KEY(r.key)) continue;
+    const pos = firstPos(r.date, r.ex);
+    if (pos == null) { out.unmatched++; continue; }
+    let idx = Number.isInteger(r.idx) ? r.idx : Number(String(r.key).split('|').pop());
+    let key = `${r.date}|@${pos}|${idx}`;
+    if (store.get('sets', key)) { // slot already taken by newer data: keep both, never overwrite
+      const used = store.values('sets').filter((x) => x.date === r.date && x.pos === pos).map((x) => x.idx);
+      idx = Math.max(-1, ...used) + 1; key = `${r.date}|@${pos}|${idx}`;
+    }
+    store.del('sets', r.key);
+    store.put('sets', { ...r, key, pos, idx });
+    out.sets++;
+  }
+  for (const r of store.values('exlog')) {
+    if (!OLD_KEY(r.key)) continue;
+    const pos = firstPos(r.date, r.ex);
+    if (pos == null) { out.unmatched++; continue; }
+    const key = `${r.date}|@${pos}`;
+    const cur = store.get('exlog', key);
+    const note = [cur?.note, r.note].map((n) => String(n || '').trim()).filter(Boolean).join(' · ');
+    store.del('exlog', r.key);
+    store.put('exlog', cur ? { ...cur, effort: isNum(cur.effort) ? cur.effort : r.effort ?? null, note } : { ...r, key, pos });
+    out.exlog++;
+  }
+  return out;
 }
 export function deleteExLog(key) { store.del('exlog', key); }
 
@@ -446,7 +494,7 @@ export function exerciseDetail(key) {
       if (prIds.has(s.key)) d.pr = true;
     }
     for (const d of byDate.values()) {
-      const xl = store.get('exlog', `${d.date}|${key}`);
+      const xl = exLogFor(d.date, key);
       d.effort = isNum(xl?.effort) ? xl.effort : null; d.note = xl?.note || '';
     }
     let best = null;
@@ -900,7 +948,7 @@ export function exportText(id = '7d') {
     nl(`  eaten total: ${e.meals ? `${fmtNum(e.kcal)} kcal, ${fmtNum(e.protein, 1)} g protein${e.partial ? ' (some items had no numbers)' : ''}` : NL}`);
     const ent = entriesFor(d);
     for (const x of ent.exercises) {
-      const xl = store.get('exlog', `${d}|${x.ex}`);
+      const xl = exLogFor(d, x.ex);
       nl(`  ${x.name}: ${x.sets.map((s) => `${s.reps ?? '?'} x ${s.load != null ? fmtKg(s.load) + ' kg' : 'no load'}${prIds.has(s.key) ? ' (PR)' : ''}`).join(', ')}${isNum(xl?.effort) ? `; effort ${xl.effort}/10` : ''}${xl?.note ? `; note: ${xl.note}` : ''}`);
     }
     for (const xl of ent.exlogs) if (!ent.exercises.some((x) => x.ex === xl.ex)) nl(`  ${xl.name}: no sets ticked${isNum(xl.effort) ? `; effort ${xl.effort}/10` : ''}${xl.note ? `; note: ${xl.note}` : ''}`);

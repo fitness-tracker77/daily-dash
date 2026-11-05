@@ -208,8 +208,9 @@ export class Cycle {
     const kind = s.kind ?? 'lift';
     if (kind === 'run') return { ...s, kind: 'run', exercises: [], distance_km: isNum(s.distance_km) && s.distance_km > 0 ? s.distance_km : null };
     if (kind !== 'lift') return null;
-    const exercises = s.exercises.filter((e) => typeof e?.name === 'string' && Number.isInteger(e?.sets) && e.sets > 0)
-      .map((e) => ({ ...e, muscle: typeof e.muscle_group === 'string' && e.muscle_group.trim() ? e.muscle_group.trim().toLowerCase() : null,
+    // pos = the card's position in the file's exercise list for that day (keys logged sets and effort notes)
+    const exercises = s.exercises.map((e, pos) => ({ e, pos })).filter(({ e }) => typeof e?.name === 'string' && Number.isInteger(e?.sets) && e.sets > 0)
+      .map(({ e, pos }) => ({ ...e, pos, muscle: typeof e.muscle_group === 'string' && e.muscle_group.trim() ? e.muscle_group.trim().toLowerCase() : null,
         rest: isNum(e.rest_seconds) && e.rest_seconds > 0 ? e.rest_seconds : null }));
     return exercises.length ? { ...s, kind: 'lift', exercises } : null;
   }

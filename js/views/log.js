@@ -165,7 +165,7 @@ function editSheet(ctx, kind, key) {
     save = (f) => {
       const ef = num(f.effort.value);
       if (ef != null && (!Number.isInteger(ef) || ef < 1 || ef > 10)) { toast('Effort must be a whole number from 1 to 10.'); return false; }
-      M.setExLog(date, { name: xl.name, id: xl.ex }, { effort: ef, note: f.note.value.trim() });
+      M.editExLog(key, { effort: ef, note: f.note.value.trim() });
     };
   } else if (kind === 'run') {
     const r = e.run;
