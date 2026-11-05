@@ -17,7 +17,8 @@ export function renderLog(root, ctx) {
   const last = bw[bw.length - 1] || null;
   const v = last ? M.vsPath(last) : null;
   const avgs = M.bodyweightAverages(bw);
-  const avgNow = last ? avgs.find((x) => x.date === last.date) : null;
+  const sm = M.bodyweightSummary(bw);
+  const avgNow = sm?.avg != null ? { y: sm.avg } : null;
   const path = M.targetPath();
   const target = path ? { from: { date: path.start, y: path.from }, to: { date: path.end, y: path.to } } : null;
 
@@ -27,6 +28,7 @@ export function renderLog(root, ctx) {
     <section class="hero" aria-label="Bodyweight">
       <p class="hero__figure figure" data-hero>${last ? fmtKg(last.kg) : '—'}<span class="hero__of"> kg</span></p>
       <p class="hero__label">${last ? `latest ${fmtKg(last.kg)} kg${avgNow ? ` · 7-day average ${fmtNum(avgNow.y, 1)} kg` : ''}` : `bodyweight ${NL}`}</p>
+      ${last ? `<p class="hero__sub">${M.bodyweightRateText(sm)}</p>` : ''}
       ${last ? `<p class="hero__sub">${fmtDate(last.date, { dow: true })}${v ? `, ${fmtNum(Math.abs(v.diff), 1)} kg ${v.side === 'on' ? 'on' : v.side} the target path` : ''}</p>` : ''}
     </section>
     <form class="form form--row" data-bw>

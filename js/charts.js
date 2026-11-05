@@ -1,6 +1,6 @@
 // Charts drawn as SVG by hand, one visual language everywhere:
 // gold line with a soft fill, faint guide lines, rounded bars, one highlighted value.
-import { esc, fmtNum, isNum, daysBetween, fmtDate } from './util.js';
+import { esc, fmtNum, isNum, daysBetween, fmtDate, addDays } from './util.js';
 
 const W = 340;
 let gid = 0;
@@ -22,8 +22,9 @@ function niceTicks(lo, hi) {
 // data (and target path), ticks every `tickStep`. Everything in `vals` is always inside [lo, hi].
 // Place a value label beside a selected point without covering any dot: above, below, left, then right.
 // Returns the rectangle { x, y } for a label of size w x h; `dots` are { x, y } centres (radius ~6).
-export function placeLabel({ cx, cy, w, h = 19, dots = [], minX = 0, maxX = 340, minY = 2, maxY = 168, r = 7 }) {
-  const cands = [[cx - w / 2, cy - h - 9], [cx - w / 2, cy + 9], [cx - w - 9, cy - h / 2], [cx + 9, cy - h / 2]];
+export function placeLabel({ cx, cy, w, h = 19, dots = [], minX = 0, maxX = 340, minY = 2, maxY = 168, r = 8 }) {
+  const cands = [[cx - w / 2, cy - h - 9], [cx - w / 2, cy + 9], [cx - w - 9, cy - h / 2], [cx + 9, cy - h / 2],
+    [cx - w / 2, cy - h - 24], [cx - w - 9, cy - h - 12], [cx - w - 9, cy + 12], [cx - w / 2, cy + 26]];
   const clamp = (c) => [Math.min(maxX - w, Math.max(minX, c[0])), Math.min(maxY - h, Math.max(minY, c[1]))];
   const hits = ([x, y]) => [...dots, { x: cx, y: cy }].filter((d) => d.x > x - r && d.x < x + w + r && d.y > y - r && d.y < y + h + r).length;
   let best = null;
@@ -42,6 +43,29 @@ export function axisFor(vals, { minSpan, tickStep }) {
   for (let k = Math.ceil(lo / (tickStep * stride) - 1e-9); k * tickStep * stride <= hi + 1e-9; k++) ticks.push(+(k * tickStep * stride).toFixed(6));
   return { lo, hi, ticks };
 }
+
+// decimals needed to print every tick the same way (even steps only: 45 / 47.5 / 50, never 45 / 48 / 50)
+export function tickDpFor(ticks) {
+  let dp = 0;
+  for (const t of ticks) { for (let d = 0; d <= 3; d++) if (Math.abs(t * 10 ** d - Math.round(t * 10 ** d)) < 1e-6) { dp = Math.max(dp, d); break; } }
+  return dp;
+}
+// weekly x-axis dates: one label every 7 days from the start, at most `max` (stride in whole weeks)
+export function weeklyLabels(d0, d1, max = 6) {
+  const span = daysBetween(d0, d1);
+  if (span < 7) return span > 0 ? [d0, d1] : [d0];
+  const weeks = Math.floor(span / 7) + 1;
+  const stride = Math.ceil(weeks / max);
+  const out = [];
+  for (let k = 0; k < weeks; k += stride) out.push(addDays(d0, k * 7));
+  return out;
+}
+const segmentsOf = (pts) => { // split where a day has no value: never a line across a gap
+  const out = []; let cur = [];
+  for (const p of pts) { if (cur.length && daysBetween(cur[cur.length - 1].date, p.date) > 1) { out.push(cur); cur = []; } cur.push(p); }
+  if (cur.length) out.push(cur);
+  return out;
+};
 
 function frame(height, ticks, y, dp) {
   let s = '';
@@ -79,16 +103,16 @@ export function lineChart({ points, target = null, hLine = null, x0 = null, x1 =
   const fmt = (v) => fmtNum(v, dp);
   let s = `<svg class="chart" viewBox="0 0 ${W} ${height}" role="img" aria-label="${esc(label)}">
     <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="chart__fill-top"/><stop offset="1" class="chart__fill-bottom"/></linearGradient></defs>`;
-  s += frame(height, ticks, y, tickDp ?? (hi - lo < 6 ? 1 : 0));
-  s += `<text class="chart__tick" x="${L}" y="${height - 5}">${fmtDate(d0)}</text>`;
-  if (d1 !== d0) s += `<text class="chart__tick" x="${R}" y="${height - 5}" text-anchor="end">${fmtDate(d1)}</text>`;
+  s += frame(height, ticks, y, tickDp ?? tickDpFor(ticks));
+  const xl = weeklyLabels(d0, d1);
+  xl.forEach((d, i) => { s += `<text class="chart__tick" x="${x(d).toFixed(1)}" y="${height - 5}" text-anchor="${i === 0 ? 'start' : i === xl.length - 1 && xl.length > 1 && span - daysBetween(d0, d) < 4 ? 'end' : 'middle'}">${fmtDate(d)}</text>`; });
   if (target) s += `<line class="chart__target" x1="${x(target.from.date)}" y1="${y(target.from.y)}" x2="${x(target.to.date)}" y2="${y(target.to.y)}"/>`;
   if (isNum(hLine)) s += `<line class="chart__target" x1="${L}" y1="${y(hLine)}" x2="${R}" y2="${y(hLine)}"/>`;
-  const lineSrc = avg ? avgPts : joinPoints ? pts : [];
-  if (avg && avgPts.length === 1) s += `<circle class="chart__hi" cx="${x(avgPts[0].date).toFixed(1)}" cy="${y(avgPts[0].y).toFixed(1)}" r="3.4"/>`;
-  if (lineSrc.length > 1) {
-    const line = lineSrc.map((p) => `${x(p.date).toFixed(1)},${y(p.y).toFixed(1)}`).join(' ');
-    s += `<polygon class="chart__area" fill="url(#${id})" points="${x(lineSrc[0].date).toFixed(1)},${B} ${line} ${x(lineSrc[lineSrc.length - 1].date).toFixed(1)},${B}"/>`;
+  const segs = avg ? segmentsOf(avgPts) : joinPoints ? [pts] : [];
+  for (const seg of segs) {
+    if (seg.length === 1) { if (avg) s += `<circle class="chart__hi" cx="${x(seg[0].date).toFixed(1)}" cy="${y(seg[0].y).toFixed(1)}" r="3.4"/>`; continue; }
+    const line = seg.map((p) => `${x(p.date).toFixed(1)},${y(p.y).toFixed(1)}`).join(' ');
+    s += `<polygon class="chart__area" fill="url(#${id})" points="${x(seg[0].date).toFixed(1)},${B} ${line} ${x(seg[seg.length - 1].date).toFixed(1)},${B}"/>`;
     s += `<polyline class="chart__line" points="${line}"/>`;
   }
   if (avg) s += '<g class="chart__faint">';
@@ -127,7 +151,7 @@ export function barChart({ bars, height = 170, dp = 0, label = 'Chart', highligh
   const hiIdx = typeof highlight === 'number' ? highlight : highlight === 'max' ? totals.indexOf(Math.max(...totals)) : lastWithData;
   const single = bars.every((b) => b.stack.length === 1);
   let s = `<svg class="chart" viewBox="0 0 ${W} ${height}" role="img" aria-label="${esc(label)}">`;
-  s += frame(height, ticks, y, 0);
+  s += frame(height, ticks, y, tickDpFor(ticks));
   bars.forEach((b, i) => {
     const cx = L + slot * i + slot / 2;
     let acc = 0;
@@ -143,7 +167,7 @@ export function barChart({ bars, height = 170, dp = 0, label = 'Chart', highligh
       acc += part.v;
     });
     if ((values || i === hiIdx) && totals[i] > 0) s += `<text class="chart__val${i === hiIdx ? ' is-hi' : ''}" x="${cx.toFixed(1)}" y="${(y(totals[i]) - 6).toFixed(1)}" text-anchor="middle">${fmtNum(totals[i], dp)}</text>`;
-    if (bars.length <= 8 || i === 0 || i === bars.length - 1) s += `<text class="chart__tick" x="${cx.toFixed(1)}" y="${height - 5}" text-anchor="middle">${esc(b.label)}</text>`;
+    if (bars.length <= 7 || i % Math.ceil(bars.length / 6) === 0) s += `<text class="chart__tick" x="${cx.toFixed(1)}" y="${height - 5}" text-anchor="middle">${esc(b.label)}</text>`;
   });
   if (isNum(target)) s += `<line class="chart__target" x1="${L}" x2="${R}" y1="${y(target)}" y2="${y(target)}"/>`;
   return s + '</svg>';
