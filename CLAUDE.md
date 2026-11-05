@@ -35,7 +35,7 @@ Plain HTML/CSS/ES-module JS PWA (no build, no backend). Hosted on GitHub Pages. 
 - `pantryEvents` random `uid()`: `{date, ts, item_id, kind: recount|bought, amount, unit}`.
 - `days` `${date}`: `{planned, done, complete}` snapshot (keeps streaks across cycles).
 - `kv` name: `badges, celebrated, settings` (history) and device-only `cycleImport, migration, lastBackup, rollupsVersion` (not in backups).
-- `rollups` `d:|w:|m:` + date: derived, rebuilt from raw logs.
+- `rollups` `d:|w:|m:` + date: derived, rebuilt from raw logs (`ROLLUP_VERSION` 2: `volume`, `muscle` kg per group, `muscleSets` sets per group).
 
 ## Data flow (imported cycle -> views)
 1. Settings pastes text -> `data.checkImport/validate` -> `store.saveImported` (kv `cycleImport`).

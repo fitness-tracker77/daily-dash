@@ -56,7 +56,7 @@ function muscleBlock(from, to) {
   return `
     <section class="chartblock" data-chart="muscle" data-from="${from}" data-to="${to}">
       <h2 class="h2">Weekly volume by muscle group</h2>
-      ${total ? `<p class="chartblock__key">${pr && wm.totals.has(pr) ? `${fmtNum(wm.totals.get(pr))} kg <small>${esc(pr)}, your priority group</small>` : `${fmtNum(total)} kg <small>all groups</small>`}</p>
+      ${total ? `<p class="chartblock__key">${M.weekHeadline(M.thisWeekMuscle())}</p>
         ${barChart({ bars, label: 'Weekly volume by muscle group', tones: toneList })}
         <div class="split">
           ${donut({ segments: [...(pr && wm.totals.has(pr) ? [{ label: pr, v: wm.totals.get(pr), gold: true }] : []), ...order.map((g) => ({ label: g, v: wm.totals.get(g) }))], tones: [...(pr && wm.totals.has(pr) ? [0] : []), ...order.map((g) => tones[g])], size: 132, center: pr && wm.totals.has(pr) ? `${Math.round((wm.totals.get(pr) / total) * 100)}%` : `${wm.groups.length}`, sub: pr && wm.totals.has(pr) ? esc(pr) : 'groups', label: 'Share of volume by muscle group' })}
@@ -95,14 +95,15 @@ function effortBlock(from, to) {
 // ---------------------------------------------------------------- plan adherence
 function adherenceBlock(from, to) {
   const weeks = M.adherenceByWeek(from, to).filter((w) => w.planned);
-  if (!weeks.length) return `<section class="chartblock" data-chart="adherence" data-from="${from}" data-to="${to}"><h2 class="h2">Plan done</h2><p class="quiet">${NL}: no planned days in this range.</p></section>`;
+  if (!weeks.length) return `<section class="chartblock" data-chart="adherence" data-from="${from}" data-to="${to}"><h2 class="h2">Plan followed</h2><p class="quiet">${NL}: no planned days in this range.</p></section>`;
   const done = sum(weeks.map((w) => w.done)), planned = sum(weeks.map((w) => w.planned));
   return `
     <section class="chartblock" data-chart="adherence" data-from="${from}" data-to="${to}">
-      <h2 class="h2">Plan done</h2>
+      <h2 class="h2">Plan followed</h2>
+      ${(() => { const cp = M.cyclePosition(); return cp ? `<p class="fine">Day ${cp.day} of ${cp.of} of the cycle</p>` : ''; })()}
       <p class="chartblock__key">${Math.round((done / planned) * 100)}% <small>${done} of ${planned} planned meals, sets and runs ticked</small></p>
       ${barChart({ bars: weeks.map((w) => ({ key: w.week, label: fmtDate(w.week), stack: [{ v: Math.round(w.pct), name: '%' }] })), label: 'Share of the plan done per week', values: weeks.length <= 8 })}
-      <p class="fine">Per week, up to today. Weeks start on Monday.</p>
+      <p class="fine">Past days count everything planned; today counts what you ticked or whose time has passed. Weeks start on Monday.</p>
     </section>`;
 }
 

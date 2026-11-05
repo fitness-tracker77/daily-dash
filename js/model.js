@@ -5,7 +5,7 @@ import * as store from './store.js';
 import { slotKey, exKey, UNGROUPED } from './data.js';
 import {
   isNum, today, addDays, addMonths, dateRange, dow, sum, round3, isValidDate, fmtKg, fmtNum, fmtDow,
-  daysBetween, weekStart, monthKey, monthStart, uid, fmtClock, fmtPace,
+  daysBetween, weekStart, esc, monthKey, monthStart, uid, fmtClock, fmtPace,
 } from './util.js';
 
 let C = null;
@@ -671,7 +671,7 @@ export function entriesFor(date) {
 // ======================================================================
 // ROLLUPS: per day (d:), week (w:, Monday) and month (m:), rebuilt from the raw logs
 // ======================================================================
-export const ROLLUP_VERSION = 1;
+export const ROLLUP_VERSION = 2; // 2: adds muscleSets (sets per muscle group)
 let rollupsDirty = true;
 let rebuildTimer = null;
 function markRollupsDirty() {
@@ -684,7 +684,7 @@ export function initRollups() {
   rollupsDirty = store.kv('rollupsVersion') !== ROLLUP_VERSION || store.kv('rollupsDirty') !== false;
 }
 
-const blankAgg = (key, kind, start) => ({ key, kind, start, volume: 0, muscle: {}, sets: 0, reps: 0, kcal: 0, protein: 0, meals: 0, mealDays: 0, sessions: 0, runs: 0, runKm: 0, runSec: 0, prs: 0 });
+const blankAgg = (key, kind, start) => ({ key, kind, start, volume: 0, muscle: {}, muscleSets: {}, sets: 0, reps: 0, kcal: 0, protein: 0, meals: 0, mealDays: 0, sessions: 0, runs: 0, runKm: 0, runSec: 0, prs: 0 });
 const r3 = (o) => { for (const k of ['volume', 'kcal', 'protein', 'runKm']) o[k] = round3(o[k]); for (const g of Object.keys(o.muscle)) o.muscle[g] = round3(o.muscle[g]); return o; };
 
 // Pure: raw records in, rollup records out (sorted by key). Builds the stored rollups and verifies them.
@@ -694,6 +694,7 @@ export function computeRollups({ sets = [], meals = [], runs = [] }) {
   const done = sortSets(sets.filter((r) => r.done && isValidDate(r.date)).map(normSet));
   for (const s of done) {
     const d = day(s.date); d.sets++;
+    d.muscleSets[s.muscle] = (d.muscleSets[s.muscle] || 0) + 1;
     if (isNum(s.reps)) d.reps += s.reps;
     const v = volumeOf(s);
     if (v != null) { d.volume += v; d.muscle[s.muscle] = (d.muscle[s.muscle] || 0) + v; }
@@ -717,6 +718,7 @@ export function computeRollups({ sets = [], meals = [], runs = [] }) {
     const g = groups.get(key);
     for (const k of ['volume', 'sets', 'reps', 'kcal', 'protein', 'meals', 'runs', 'runKm', 'runSec', 'prs']) g[k] += d[k];
     for (const [m, v] of Object.entries(d.muscle)) g.muscle[m] = (g.muscle[m] || 0) + v;
+    for (const [m, v] of Object.entries(d.muscleSets)) g.muscleSets[m] = (g.muscleSets[m] || 0) + v;
     if (d.meals > 0) g.mealDays++;
     if (d.sets > 0) g.sessions++;
   };
@@ -771,7 +773,21 @@ export function weeklyMuscle(from, to) {
   const totals = new Map();
   for (const { r } of weeks) for (const [m, v] of Object.entries(r?.muscle || {})) totals.set(m, (totals.get(m) || 0) + v);
   const groups = [...totals.entries()].sort((a, b) => b[1] - a[1]).map(([m]) => m);
-  return { weeks: weeks.map(({ week, r }) => ({ week, muscle: r?.muscle || {}, volume: r?.volume || 0, sets: r?.sets || 0 })), groups, totals, priority: C.priorityMuscle };
+  return { weeks: weeks.map(({ week, r }) => ({ week, muscle: r?.muscle || {}, muscleSets: r?.muscleSets || {}, volume: r?.volume || 0, sets: r?.sets || 0 })), groups, totals, priority: C.priorityMuscle };
+}
+// sets and kg per muscle group for the week (Monday to Sunday) containing `date`; the priority group's headline uses this
+export function thisWeekMuscle(date = today()) {
+  const r = rollup(`w:${weekStart(date)}`);
+  const sets = r?.muscleSets || {};
+  const totalSets = sum(Object.values(sets));
+  const pr = C?.priorityMuscle ?? null;
+  const prSets = pr ? sets[pr] || 0 : null;
+  return { week: weekStart(date), priority: pr, sets, totalSets, prSets, prShare: pr && totalSets ? prSets / totalSets : null, prKg: pr ? r?.muscle?.[pr] || 0 : null, totalKg: r?.volume || 0 };
+}
+// kg cannot be compared across groups, so the headline is SETS this week; kg comes second
+export function weekHeadline(w) {
+  if (w.priority) return `${fmtNum(w.prSets)} sets <small>${esc(w.priority)} this week${w.prShare != null ? `, ${Math.round(w.prShare * 100)}% of all sets` : ''} · ${fmtNum(w.prKg)} kg</small>`;
+  return `${fmtNum(w.totalSets)} sets <small>all groups this week · ${fmtNum(w.totalKg)} kg</small>`;
 }
 export const exerciseTrend = (key, from, to) => exerciseDetail(key).days.filter((d) => d.date >= from && d.date <= to);
 export function nutritionIn(from, to) {
@@ -783,14 +799,36 @@ export function runsByWeek(from, to) {
 export function setsByWeek(from, to) {
   return weeksIn(from, to).map((w) => { const r = rollup(`w:${w}`); return { week: w, sets: r?.sets || 0, reps: r?.reps || 0 }; });
 }
-// share of planned items done per week (meals ticked + sets ticked + runs), from the day snapshots
-export function adherenceByWeek(from, to) {
-  const t = today();
+// Plan followed. Past days count every planned item; today counts items already ticked or whose time has passed;
+// future items never count. `at` = { date, minutes } (minutes since midnight), injectable for tests.
+const nowAt = () => { const n = new Date(); return { date: today(), minutes: n.getHours() * 60 + n.getMinutes() }; };
+const clockMin = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '')); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+export function progressAt(date, at = nowAt()) {
+  if (date < at.date) return progress(date);
+  if (date > at.date) return { planned: 0, done: 0, complete: false };
+  const passed = (t) => { const m = clockMin(t); return m != null && m <= at.minutes; };
+  let planned = 0, done = 0;
+  for (const s of C.mealSlots(date)) { const d = !!tick(date, s); if (d || passed(s.time)) planned++; if (d) done++; }
+  const sp = sessionProgress(date);
+  if (sp) {
+    const gym = C.slots(date).find((x) => x.type === 'gym');
+    const started = gym ? passed(gym.time) : false;
+    planned += started ? sp.planned : sp.done; done += sp.done;
+  }
+  return { planned, done, complete: planned > 0 && done >= planned };
+}
+// "Day X of Y of the cycle": today's position between meta.start_date and meta.end_date (null when unknown or outside)
+export function cyclePosition(date = today()) {
+  if (!C?.start || !C?.end) return null;
+  const of = daysBetween(C.start, C.end) + 1, day = daysBetween(C.start, date) + 1;
+  return of > 0 && day >= 1 && day <= of ? { day, of } : null;
+}
+export function adherenceByWeek(from, to, at = nowAt()) {
   return weeksIn(from, to).map((w) => {
     let planned = 0, done = 0;
     for (const d of dateRange(w, addDays(w, 6))) {
-      if (d > t || d < from) continue;
-      const p = progress(d);
+      if (d > at.date || d < from) continue;
+      const p = progressAt(d, at);
       planned += p.planned; done += p.done;
     }
     return { week: w, planned, done, pct: planned ? (done / planned) * 100 : null };
