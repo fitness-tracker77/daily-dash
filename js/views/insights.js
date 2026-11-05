@@ -6,7 +6,7 @@ import { lineChart, barChart, donut } from '../charts.js';
 import { head, NL, nl, recapBlock } from './common.js';
 import { exerciseSheet } from './train.js';
 
-const ui = { range: '1M', ex: null, heat: null, month: null, eqOffset: 0 };
+const ui = { measure: 'sets', range: '1M', ex: null, heat: null, month: null, eqOffset: 0 };
 export const insightsState = ui;
 
 const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
@@ -44,27 +44,29 @@ export function renderInsights(root, ctx) {
 
 // ---------------------------------------------------------------- weekly volume per muscle group
 function muscleBlock(from, to) {
-  const wm = M.weeklyMuscle(from, to);
-  const total = sum([...wm.totals.values()]);
-  const pr = wm.priority;
-  const order = wm.groups.filter((g) => g !== pr);
+  const mv = M.muscleView(from, to, ui.measure);
+  const { total, totals, unit } = mv;
+  const pr = mv.priority && totals.has(mv.priority) ? mv.priority : null;
+  const order = mv.groups.filter((g) => g !== pr);
   const tones = {}; order.forEach((g, i) => { tones[g] = i % 5; });
-  const bars = wm.weeks.map((w) => ({
+  const bars = mv.weeks.map((w) => ({
     key: w.week, label: fmtDate(w.week),
-    stack: [...(pr && w.muscle[pr] ? [{ v: w.muscle[pr], gold: true, name: pr }] : []), ...order.map((g) => ({ v: w.muscle[g] || 0, name: g }))],
+    stack: [...(pr && w.values[pr] ? [{ v: w.values[pr], gold: true, name: pr }] : []), ...order.map((g) => ({ v: w.values[g] || 0, name: g }))],
   }));
-  const toneList = [...(pr && wm.totals.has(pr) ? [0] : []), ...order.map((g) => tones[g])];
+  const toneList = [...(pr ? [0] : []), ...order.map((g) => tones[g])];
+  const label = `Weekly ${unit} by muscle group`;
   return `
     <section class="chartblock" data-chart="muscle" data-from="${from}" data-to="${to}">
       <h2 class="h2">Weekly volume by muscle group</h2>
-      ${total ? `<p class="chartblock__key">${M.weekHeadline(M.thisWeekMuscle())}</p>
-        ${barChart({ bars, label: 'Weekly volume by muscle group', tones: toneList })}
+      <nav class="range range--sm" aria-label="Measure">${[['sets', 'Sets'], ['kg', 'kg']].map(([id, t]) => `<button class="range__b${id === mv.measure ? ' is-on' : ''}" data-measure="${id}" aria-pressed="${id === mv.measure}">${t}</button>`).join('')}</nav>
+      ${total ? `<p class="chartblock__key">${mv.headline}</p>
+        ${barChart({ bars, label, tones: toneList })}
         <div class="split">
-          ${donut({ segments: [...(pr && wm.totals.has(pr) ? [{ label: pr, v: wm.totals.get(pr), gold: true }] : []), ...order.map((g) => ({ label: g, v: wm.totals.get(g) }))], tones: [...(pr && wm.totals.has(pr) ? [0] : []), ...order.map((g) => tones[g])], size: 132, center: pr && wm.totals.has(pr) ? `${Math.round((wm.totals.get(pr) / total) * 100)}%` : `${wm.groups.length}`, sub: pr && wm.totals.has(pr) ? esc(pr) : 'groups', label: 'Share of volume by muscle group' })}
-        <ul class="legend">${[...(pr && wm.totals.has(pr) ? [pr] : []), ...order].map((g) => `<li class="${g === pr ? 'is-gold' : `tone-${tones[g]}`}"><span class="legend__sw"></span>${esc(cap(g))}${g === UNGROUPED ? ' <small>(no muscle_group in cycle.json)</small>' : ''}<span class="legend__v">${fmtNum(wm.totals.get(g))} kg <small>${Math.round((wm.totals.get(g) / total) * 100)}%</small></span></li>`).join('')}</ul>
+          ${donut({ segments: [...(pr ? [{ label: pr, v: totals.get(pr), gold: true }] : []), ...order.map((g) => ({ label: g, v: totals.get(g) }))], tones: toneList, size: 132, center: pr ? `${Math.round((totals.get(pr) / total) * 100)}%` : `${mv.groups.length}`, sub: pr ? esc(pr) : 'groups', label: `Share of ${unit} by muscle group` })}
+          <ul class="legend">${[...(pr ? [pr] : []), ...order].map((g) => `<li class="${g === pr ? 'is-gold' : `tone-${tones[g]}`}"><span class="legend__sw"></span>${esc(cap(g))}${g === UNGROUPED ? ' <small>(no muscle_group in cycle.json)</small>' : ''}<span class="legend__v">${fmtNum(totals.get(g))} ${unit === 'sets' && totals.get(g) === 1 ? 'set' : unit} <small>${Math.round((totals.get(g) / total) * 100)}%</small></span></li>`).join('')}</ul>
         </div>
         <button class="link" data-more="muscle">Week by week</button>`
-      : `<p class="quiet">${NL}: no sets with a load in this range.</p>`}
+      : `<p class="quiet">${NL}: no ${unit === 'kg' ? 'sets with a load' : 'sets'} in this range.</p>`}
     </section>`;
 }
 
@@ -121,10 +123,10 @@ function exerciseBlock(from, to) {
       <h2 class="h2">Load and estimated 1RM</h2>
       <label class="select"><span class="sr">Exercise</span><select data-ex>${list.map((e) => `<option value="${esc(e.ex)}"${e.ex === ui.ex ? ' selected' : ''}>${esc(e.name)}</option>`).join('')}</select></label>
       ${loads.length ? `<p class="chartblock__key">${fmtKg(Math.max(...loads.map((p) => p.y)))} kg <small>heaviest set in range</small></p>
-        ${lineChart({ points: loads, x0: from, x1: to, highlight: 'max', unit: 'kg', label: 'Heaviest set per session' })}` : `<p class="quiet">Load ${NL} in this range.</p>`}
-      ${e1.length ? `<p class="chartblock__key">${fmtNum(Math.max(...e1.map((p) => p.y)), 1)} kg <small>estimated 1RM, estimate</small></p>
-        ${lineChart({ points: e1, x0: from, x1: to, highlight: 'max', unit: 'kg estimate', label: 'Estimated 1RM per session' })}
-        <p class="fine">Estimate (Epley): kg × (1 + reps ÷ 30), sets of 1 to 10 reps only. Rings on the load line mark PRs.</p>` : ''}
+        ${loads.length > 1 ? lineChart({ points: loads, x0: from, x1: to, highlight: 'max', unit: 'kg', label: 'Heaviest set per session' }) : '<p class="fine">Chart appears after 2 sessions.</p>'}` : `<p class="quiet">Load ${NL} in this range.</p>`}
+      ${e1.length ? `<p class="chartblock__key">${fmtNum(Math.max(...e1.map((p) => p.y)), 1)} kg <small>estimated 1RM (Epley)</small></p>
+        ${e1.length > 1 ? lineChart({ points: e1, x0: from, x1: to, highlight: 'max', unit: 'kg estimate', label: 'Estimated 1RM per session' }) : '<p class="fine">Chart appears after 2 sessions.</p>'}
+        <p class="fine">Epley: kg × (1 + reps ÷ 30), sets of 1 to 10 reps only. Rings on the load line mark PRs.</p>` : ''}
       <button class="link" data-more="exercise">Full history</button>
     </section>`;
 }
@@ -304,6 +306,7 @@ function more(kind, from, to) {
 }
 
 function bind(root, ctx, from, to) {
+  root.querySelectorAll('[data-measure]').forEach((b) => b.addEventListener('click', () => { ui.measure = b.dataset.measure; ctx.rerender(); }));
   root.querySelectorAll('[data-range]').forEach((b) => b.addEventListener('click', () => { ui.range = b.dataset.range; ui.heat = null; ctx.rerender(); }));
   root.querySelector('[data-ex]')?.addEventListener('change', (e) => { ui.ex = e.target.value; ctx.rerender(); });
   root.querySelector('[data-month]')?.addEventListener('change', (e) => { ui.month = e.target.value; ctx.rerender(); });

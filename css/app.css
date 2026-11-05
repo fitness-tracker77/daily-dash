@@ -488,3 +488,5 @@ body.has-rest .toast { bottom: calc(var(--tabbar) + var(--safe-b) + 84px); }
 .weekdots .is-done, .weekdots .is-today { color: var(--text); }
 
 .nextup--open .nextup__label { color: var(--bad); }
+.range--sm { margin: 0 0 8px; max-width: 180px; }
+.range--sm .range__b { min-height: 36px; font-size: 13px; }

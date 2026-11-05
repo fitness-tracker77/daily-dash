@@ -54,3 +54,19 @@ test('sets with no load still count as sets', () => {
   M.toggleSet('2026-11-04', c.session('2026-11-04').exercises[0], 0, {});
   assert.equal(M.thisWeekMuscle('2026-11-05').prSets, 1);
 });
+
+test('muscle view: Sets and kg each use one measure for bars, donut, legend and headline', () => {
+  reset(); const c = useCycle(raw());
+  const ex = c.session('2026-11-04').exercises;
+  for (let i = 0; i < 4; i++) M.toggleSet('2026-11-04', ex[0], i, { reps: 8, load: 50 });   // hamstrings 4 sets, 1600 kg
+  for (let i = 0; i < 6; i++) M.toggleSet('2026-11-04', ex[1], i, { reps: 5, load: 20 });   // chest 6 sets, 600 kg
+  store.put('sets', { key: '2026-11-04|@1|6', date: '2026-11-04', pos: 1, ex: 'bench', name: 'Bench', muscle: 'chest', idx: 6, done: true, reps: 12, load: null, ts: 99 }); // bodyweight set: a set, no kg
+  const sets = M.muscleView('2026-11-02', '2026-11-08', 'sets');
+  assert.deepEqual([sets.unit, sets.total, sets.totals.get('hamstrings'), sets.totals.get('chest'), sets.groups[0]], ['sets', 11, 4, 7, 'chest']);
+  assert.deepEqual(sets.weeks[0].values, { hamstrings: 4, chest: 7 });
+  assert.match(sets.headline, /^4 sets <small>hamstrings this week, 36% of all sets/);
+  const kg = M.muscleView('2026-11-02', '2026-11-08', 'kg');
+  assert.deepEqual([kg.unit, kg.total, kg.totals.get('chest'), kg.groups[0]], ['kg', 2200, 600, 'hamstrings']);
+  assert.match(kg.headline, /^1,?600 kg <small>hamstrings this week, 73% of all kg · 4 sets/);
+  assert.equal(M.muscleView('2026-11-02', '2026-11-08').measure, 'sets', 'default');
+});

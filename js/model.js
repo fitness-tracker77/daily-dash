@@ -880,12 +880,29 @@ export function thisWeekMuscle(date = today()) {
   const totalSets = sum(Object.values(sets));
   const pr = C?.priorityMuscle ?? null;
   const prSets = pr ? sets[pr] || 0 : null;
-  return { week: weekStart(date), priority: pr, sets, totalSets, prSets, prShare: pr && totalSets ? prSets / totalSets : null, prKg: pr ? r?.muscle?.[pr] || 0 : null, totalKg: r?.volume || 0 };
+  return { week: weekStart(date), priority: pr, sets, totalSets, prSets, prShare: pr && totalSets ? prSets / totalSets : null, prKg: pr ? r?.muscle?.[pr] || 0 : null, totalKg: r?.volume || 0, prKgShare: pr && r?.volume ? (r.muscle?.[pr] || 0) / r.volume : null };
 }
 // kg cannot be compared across groups, so the headline is SETS this week; kg comes second
-export function weekHeadline(w) {
-  if (w.priority) return `${fmtNum(w.prSets)} sets <small>${esc(w.priority)} this week${w.prShare != null ? `, ${Math.round(w.prShare * 100)}% of all sets` : ''} · ${fmtNum(w.prKg)} kg</small>`;
+export function weekHeadline(w, measure = 'sets') {
+  const pct = (v) => (v != null ? `, ${Math.round(v * 100)}% of all ${measure === 'kg' ? 'kg' : 'sets'}` : '');
+  if (measure === 'kg') {
+    if (w.priority) return `${fmtNum(w.prKg)} kg <small>${esc(w.priority)} this week${pct(w.prKgShare)} · ${fmtNum(w.prSets)} sets</small>`;
+    return `${fmtNum(w.totalKg)} kg <small>all groups this week · ${fmtNum(w.totalSets)} sets</small>`;
+  }
+  if (w.priority) return `${fmtNum(w.prSets)} sets <small>${esc(w.priority)} this week${pct(w.prShare)} · ${fmtNum(w.prKg)} kg</small>`;
   return `${fmtNum(w.totalSets)} sets <small>all groups this week · ${fmtNum(w.totalKg)} kg</small>`;
+}
+// One measure ('sets' or 'kg') for the bars, donut, legend and headline, so they always agree.
+// kg cannot be compared across groups, so Sets is the default in the view.
+export function muscleView(from, to, measure = 'sets') {
+  const m = measure === 'kg' ? 'kg' : 'sets';
+  const wm = weeklyMuscle(from, to);
+  const pick = (w) => (m === 'kg' ? w.muscle : w.muscleSets);
+  const totals = new Map();
+  for (const w of wm.weeks) for (const [g, v] of Object.entries(pick(w))) if (v > 0) totals.set(g, (totals.get(g) || 0) + v);
+  const groups = [...totals.entries()].sort((a, b) => b[1] - a[1]).map(([g]) => g);
+  return { measure: m, unit: m === 'kg' ? 'kg' : 'sets', priority: wm.priority, groups, totals, total: sum([...totals.values()]),
+    weeks: wm.weeks.map((w) => ({ week: w.week, values: pick(w) })), headline: weekHeadline(thisWeekMuscle(), m) };
 }
 // Recent PRs: heavier than your best on any earlier date (same rule as the PR badge), newest first
 export function recentPrs(n = 5) {
