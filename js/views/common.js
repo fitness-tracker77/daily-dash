@@ -58,7 +58,7 @@ export function recapBlock(r) {
         ${row('Days completed', `${r.completed} of ${r.plannedDays}`)}
         ${row('Average kcal', nl(r.kcalAvg, (v) => `${fmtNum(v)} <small>over ${r.mealDays} day${r.mealDays === 1 ? '' : 's'}</small>`))}
         ${row('Average protein', nl(r.proteinAvg, (v) => `${fmtNum(v, 1)} g`))}
-        ${row('Sessions', nl(r.sessions || null, (v) => fmtNum(v)))}
+        ${row('Sessions <small>incl. runs</small>', nl(r.sessions || null, (v) => fmtNum(v)))}
         ${row('Volume', nl(r.volume, (v) => `${fmtNum(v)} kg`))}
         ${row('PRs', nl(r.prs, (v) => fmtNum(v)))}
       </dl>

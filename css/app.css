@@ -491,3 +491,7 @@ body.has-rest .toast { bottom: calc(var(--tabbar) + var(--safe-b) + 84px); }
 .range--sm { margin: 0 0 8px; max-width: 180px; }
 .range--sm .range__b { min-height: 36px; font-size: 13px; }
 .chart__faint { opacity: .5; }
+.tone-5 { --tone: .62; } .tone-6 { --tone: .30; } .tone-7 { --tone: .2; }
+.period { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 8px 0 2px; }
+.period__name { min-width: 11ch; text-align: center; font-weight: 600; font-size: 15px; }
+.period .icon-btn:disabled { opacity: .3; }

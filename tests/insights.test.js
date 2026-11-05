@@ -16,18 +16,18 @@ const raw = () => ({
 });
 const slot = (date, id) => M.cycle().slots(date).find((s) => s.id === id);
 
-test('Plan followed: past days count all, today only ticked or time passed, future never', () => {
+test('Plan followed: past days count all, today only what is ticked, future never', () => {
   reset(); useCycle(raw());
   M.setTick('2026-11-03', slot('2026-11-03', 'b'), true);   // past: 1 of 3
-  M.setTick('2026-11-05', slot('2026-11-05', 'l'), true);   // today 13:00 ticked
-  const at = { date: '2026-11-05', minutes: 14 * 60 };     // 08:00 passed (unticked), 13:00 ticked, 20:00 not yet
+  M.setTick('2026-11-05', slot('2026-11-05', 'l'), true);   // today: one ticked, two not yet
+  const at = { date: '2026-11-05', minutes: 14 * 60 };
   assert.deepEqual(M.progressAt('2026-11-03', at), { planned: 3, done: 1, complete: false });
-  assert.deepEqual(M.progressAt('2026-11-05', at), { planned: 2, done: 1, complete: false });
+  assert.deepEqual(M.progressAt('2026-11-05', at), { planned: 1, done: 1, complete: false }, 'unticked items are not missed yet, even if their time has passed');
   assert.deepEqual(M.progressAt('2026-11-06', at), { planned: 0, done: 0, complete: false });
   const w = M.adherenceByWeek('2026-11-02', '2026-11-08', at)[0];
-  assert.deepEqual([w.planned, w.done], [15, 2]); // 3 + the 10 sets planned on 11-04 + 2
-  M.setTick('2026-11-05', slot('2026-11-05', 'd'), true);  // ticked early: counts although its time has not passed
-  assert.deepEqual(M.progressAt('2026-11-05', at), { planned: 3, done: 2, complete: false });
+  assert.deepEqual([w.planned, w.done], [14, 2]); // 3 + the 10 sets planned on 11-04 + today's 1 ticked
+  // once the day is over the unticked items are missed
+  assert.deepEqual(M.adherenceByWeek('2026-11-02', '2026-11-08', { date: '2026-11-06', minutes: 60 })[0].planned, 16);
 });
 
 test('cycle position: Day X of Y', () => {
@@ -65,6 +65,7 @@ test('muscle view: Sets and kg each use one measure for bars, donut, legend and 
   assert.deepEqual([sets.unit, sets.total, sets.totals.get('hamstrings'), sets.totals.get('chest'), sets.groups[0]], ['sets', 11, 4, 7, 'chest']);
   assert.deepEqual(sets.weeks[0].values, { hamstrings: 4, chest: 7 });
   assert.match(sets.headline, /^4 sets <small>hamstrings this week, 36% of all sets/);
+  assert.match(M.muscleView('2026-11-01', '2026-11-30', 'sets', 'in November 2026').headline, /^4 sets <small>hamstrings in November 2026, 36% of all sets/);
   const kg = M.muscleView('2026-11-02', '2026-11-08', 'kg');
   assert.deepEqual([kg.unit, kg.total, kg.totals.get('chest'), kg.groups[0]], ['kg', 2200, 600, 'hamstrings']);
   assert.match(kg.headline, /^1,?600 kg <small>hamstrings this week, 73% of all kg · 4 sets/);

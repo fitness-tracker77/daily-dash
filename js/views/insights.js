@@ -6,26 +6,32 @@ import { lineChart, barChart, donut } from '../charts.js';
 import { head, NL, nl, recapBlock } from './common.js';
 import { exerciseSheet } from './train.js';
 
-const ui = { measure: 'sets', range: '1M', ex: null, heat: null, month: null, eqOffset: 0 };
+const ui = { measure: 'sets', kind: 'Month', anchor: null, ex: null, heat: null, month: null, eqOffset: 0 };
 export const insightsState = ui;
 
 const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 
 export function renderInsights(root, ctx) {
   const C = M.cycle();
-  const { from, to } = M.rangeBounds(ui.range);
-  const lifted = M.liftedIn(from, to);
   const t = today();
+  const per = M.periodBounds(ui.kind, ui.anchor || t);
+  const { from, to } = per;
+  const lifted = M.liftedIn(from, to);
 
   root.innerHTML = `
     ${head(ctx, '<span>Insights</span>')}
-    <nav class="range" aria-label="Range">${M.RANGES.map((r) => `<button class="range__b${r === ui.range ? ' is-on' : ''}" data-range="${r}" aria-pressed="${r === ui.range}">${r}</button>`).join('')}</nav>
+    <nav class="range" aria-label="Period">${M.PERIODS.map((k) => `<button class="range__b${k === ui.kind ? ' is-on' : ''}" data-kind="${k}" aria-pressed="${k === ui.kind}">${k}</button>`).join('')}</nav>
+    <div class="period" aria-label="Selected period">
+      <button class="icon-btn" data-step="prev" ${per.canPrev ? '' : 'disabled'} aria-label="Earlier ${ui.kind.toLowerCase()}">‹</button>
+      <span class="period__name">${esc(cap(per.label))}</span>
+      <button class="icon-btn" data-step="next" ${per.canNext ? '' : 'disabled'} aria-label="Later ${ui.kind.toLowerCase()}">›</button>
+    </div>
     <section class="hero" aria-label="Weight lifted">
       <p class="hero__figure figure" data-hero>${lifted ? `${fmtNum(lifted.volume)}<span class="hero__of"> kg</span>` : '—'}</p>
-      <p class="hero__label">${lifted ? `lifted from ${fmtDate(from)} to ${fmtDate(to)}, ${lifted.sessions} session${lifted.sessions === 1 ? '' : 's'}, ${lifted.sets} sets` : `lifted from ${fmtDate(from)} to ${fmtDate(to)}: not logged`}</p>
+      <p class="hero__label">${lifted ? `lifted ${ui.kind === 'All' ? 'in all time' : `in ${esc(per.label)}`}, ${lifted.sessions} session${lifted.sessions === 1 ? '' : 's'} (incl. runs), ${lifted.sets} sets` : `lifted ${ui.kind === 'All' ? 'in all time' : `in ${esc(per.label)}`}: not logged yet`}</p>
     </section>
     ${M.isRecapDay(t) ? recapBlock(M.weekRecap(t)) : ''}
-    ${muscleBlock(from, to)}
+    ${muscleBlock(from, to, per)}
     ${setsBlock(from, to)}
     ${exerciseBlock(from, to)}
     ${effortBlock(from, to)}
@@ -34,21 +40,21 @@ export function renderInsights(root, ctx) {
     ${adherenceBlock(from, to)}
     ${runBlock(from, to)}
     ${heatBlock(from, to)}
-    ${reviewBlock()}
-    ${prBlock()}
+    ${reviewBlock(from, to)}
+    ${prBlock(from, to, per.label)}
     ${badgesBlock()}
-    ${funBlock()}
+    ${funBlock(from, to, per.label)}
   `;
   bind(root, ctx, from, to);
 }
 
 // ---------------------------------------------------------------- weekly volume per muscle group
-function muscleBlock(from, to) {
-  const mv = M.muscleView(from, to, ui.measure);
+function muscleBlock(from, to, per) {
+  const mv = M.muscleView(from, to, ui.measure, ui.kind === 'All' ? 'in all time' : `in ${per.label}`);
   const { total, totals, unit } = mv;
   const pr = mv.priority && totals.has(mv.priority) ? mv.priority : null;
   const order = mv.groups.filter((g) => g !== pr);
-  const tones = {}; order.forEach((g, i) => { tones[g] = i % 5; });
+  const tones = mv.tones;
   const bars = mv.weeks.map((w) => ({
     key: w.week, label: fmtDate(w.week),
     stack: [...(pr && w.values[pr] ? [{ v: w.values[pr], gold: true, name: pr }] : []), ...order.map((g) => ({ v: w.values[g] || 0, name: g }))],
@@ -143,7 +149,7 @@ function bodyweightBlock(from, to) {
   const pts = entries.map((b) => { const v = M.vsPath(b); return { date: b.date, y: b.kg, mark: v?.side }; });
   const last = entries[entries.length - 1];
   const v = last ? M.vsPath(last) : null;
-  const sm = M.bodyweightSummary();
+  const sm = last ? M.bodyweightSummary(M.bodyweights().filter((b) => b.date <= last.date)) : null;
   return `
     <section class="chartblock" data-chart="bodyweight" data-from="${from}" data-to="${to}">
       <h2 class="h2">Bodyweight</h2>
@@ -158,18 +164,22 @@ function bodyweightBlock(from, to) {
 
 // ---------------------------------------------------------------- kcal and protein against targets
 function nutritionBlock(from, to, C) {
-  const days = M.nutritionIn(from, to);
-  if (!days.length) return `<section class="chartblock" data-chart="nutrition" data-from="${from}" data-to="${to}"><h2 class="h2">Energy and protein</h2><p class="quiet">${NL}: no meals ticked in this range.</p></section>`;
+  const days = M.nutritionIn(from, to);   // completed days only
+  const sofar = M.todaySoFar();
+  const showSofar = sofar && today() >= from && today() <= to;
+  const sofarLine = showSofar ? `<p class="fine">Today so far: ${fmtNum(sofar.kcal)} kcal, ${fmtNum(sofar.protein, 1)} g protein (left out of the averages until the day is over)</p>` : '';
+  if (!days.length) return `<section class="chartblock" data-chart="nutrition" data-from="${from}" data-to="${to}"><h2 class="h2">Energy and protein</h2><p class="quiet">${NL}: no completed days with ticked meals in this period.</p>${sofarLine}</section>`;
   const avgK = sum(days.map((d) => d.kcal)) / days.length, avgP = sum(days.map((d) => d.protein)) / days.length;
   return `
     <section class="chartblock" data-chart="nutrition" data-from="${from}" data-to="${to}">
       <h2 class="h2">Energy and protein</h2>
-      <p class="chartblock__key">${fmtNum(avgK)} kcal <small>average over ${days.length} day${days.length === 1 ? '' : 's'} with logged meals${C.kcalTarget != null ? `, target ${fmtNum(C.kcalTarget)}` : ''}</small></p>
+      <p class="chartblock__key">${fmtNum(avgK)} kcal <small>average over ${days.length} completed day${days.length === 1 ? '' : 's'} with logged meals${C.kcalTarget != null ? `, target ${fmtNum(C.kcalTarget)}` : ''}</small></p>
       ${lineChart({ points: days.map((d) => ({ date: d.date, y: d.kcal })), hLine: C.kcalTarget, x0: from, x1: to, dp: 0, unit: 'kcal', label: 'kcal per day' })}
       <p class="chartblock__key">${fmtNum(avgP, 1)} g <small>protein average${C.proteinTarget != null ? `, target ${fmtNum(C.proteinTarget)} g` : ''}</small></p>
       ${lineChart({ points: days.map((d) => ({ date: d.date, y: d.protein })), hLine: C.proteinTarget, x0: from, x1: to, dp: 0, unit: 'g', label: 'Protein per day' })}
-      ${(() => { const p = M.proteinTargetDays(from, to); return p ? `<p class="chartblock__key">${p.hit} of ${p.of} <small>days reached the ${fmtNum(p.target)} g protein target</small></p>` : ''; })()}
-      <p class="fine">Only days with at least one ticked meal. Dashed: the daily target.</p>
+      ${(() => { const p = M.proteinTargetDays(from, to); return p ? `<p class="chartblock__key">${p.hit} of ${p.of} <small>completed days reached the ${fmtNum(p.target)} g protein target</small></p>` : ''; })()}
+      ${sofarLine}
+      <p class="fine">Only completed days with at least one ticked meal. Dashed: the daily target.</p>
       <button class="link" data-more="nutrition">Day by day</button>
     </section>`;
 }
@@ -189,7 +199,7 @@ function runBlock(from, to) {
 
 // ---------------------------------------------------------------- calendar heatmap, month by month
 function heatBlock(from, to) {
-  const first = monthKey(from), last = monthKey(to);
+  const first = monthKey(from), last = monthKey(to < today() ? to : today());
   if (!ui.heat || ui.heat > last || ui.heat < first) ui.heat = last;
   const mk = ui.heat;
   const days = dateRange(monthStart(mk), monthEnd(mk));
@@ -220,34 +230,36 @@ function heatBlock(from, to) {
 }
 
 // ---------------------------------------------------------------- monthly review
-function reviewBlock() {
-  const months = M.monthsWithData();
+function reviewBlock(from, to) {
+  const months = M.monthsWithData().filter((m) => monthEnd(m) >= from && monthStart(m) <= to);
+  if (!months.length) return '';
   if (!ui.month || !months.includes(ui.month)) ui.month = months[0];
   const r = M.monthReview(ui.month);
   const row = (k, v) => `<div><dt>${k}</dt><dd>${v}</dd></div>`;
   return `
     <section class="review" data-review="${ui.month}">
       <h2 class="h2">Monthly review</h2>
-      <label class="select"><span class="sr">Month</span><select data-month>${months.map((m) => `<option value="${m}"${m === ui.month ? ' selected' : ''}>${fmtMonthKey(m)}</option>`).join('')}</select></label>
+      ${months.length > 1 ? `<label class="select"><span class="sr">Month</span><select data-month>${months.map((m) => `<option value="${m}"${m === ui.month ? ' selected' : ''}>${fmtMonthKey(m)}</option>`).join('')}</select></label>` : `<p class="sub">${fmtMonthKey(ui.month)}</p>`}
       <dl class="facts">
-        ${row('Sessions', nl(r.sessions, (v) => fmtNum(v)))}
+        ${row('Sessions <small>incl. runs</small>', nl(r.sessions, (v) => fmtNum(v)))}
         ${row('Total volume', nl(r.volume, (v) => `${fmtNum(v)} kg`))}
         ${row('PRs', nl(r.prs, (v) => fmtNum(v)))}
         ${row('Weight change', r.bwChange ? `${r.bwChange.diff > 0 ? '+' : ''}${fmtNum(r.bwChange.diff, 1)} kg <small>${fmtDate(r.bwChange.from.date)} to ${fmtDate(r.bwChange.to.date)}</small>` : `${NL}${r.bwCount === 1 ? ' <small>(one weigh-in)</small>' : ''}`)}
-        ${row('Average kcal', nl(r.kcalAvg, (v) => `${fmtNum(v)} <small>over ${r.mealDays} day${r.mealDays === 1 ? '' : 's'}</small>`))}
+        ${row('Average kcal', nl(r.kcalAvg, (v) => `${fmtNum(v)} <small>over ${r.mealDays} completed day${r.mealDays === 1 ? '' : 's'}</small>`))}
         ${row('Average protein', nl(r.proteinAvg, (v) => `${fmtNum(v, 1)} g`))}
+        ${r.todaySoFar ? row('Today so far', `${fmtNum(r.todaySoFar.kcal)} kcal, ${fmtNum(r.todaySoFar.protein, 1)} g protein`) : ''}
         ${row('Runs', nl(r.runs, (v) => `${v.count}${v.withDistance ? `, ${fmtKg(v.km)} km` : ''}`))}
       </dl>
     </section>`;
 }
 
-function prBlock() {
-  const list = M.recentPrs(5);
+function prBlock(from, to, label) {
+  const list = M.recentPrs(5, from, to);
   return `
     <section class="badges" aria-label="Recent PRs">
-      <h2 class="h2">Recent PRs</h2>
+      <h2 class="h2">PRs in ${esc(label)}</h2>
       ${list.length ? `<ul class="list">${list.map((h) => `<li class="is-earned"><span>${esc(h.name)} <strong>${fmtKg(h.load)} kg</strong></span><span>up from ${fmtKg(h.prev)} kg, ${fmtDate(h.date)}</span></li>`).join('')}</ul>
-      <p class="fine">A PR is a heavier set than your best on any earlier date.</p>` : '<p class="quiet">No PRs logged yet.</p>'}
+      <p class="fine">A PR is a heavier set than your best on any earlier date.</p>` : '<p class="quiet">No PRs logged in this period.</p>'}
     </section>`;
 }
 
@@ -255,20 +267,20 @@ function badgesBlock() {
   const b = M.updateBadges();
   return `
     <section class="badges">
-      <h2 class="h2">Badges</h2>
+      <h2 class="h2">Badges <small>all time</small></h2>
       <ul class="list">${b.map((x) => `<li class="${x.date ? 'is-earned' : ''}"><span>${esc(x.label)}</span><span>${x.date ? fmtDate(x.date, { year: true }) : 'not yet'}</span></li>`).join('')}</ul>
     </section>`;
 }
 
-function funBlock() {
-  const f = M.funStats();
+function funBlock(from, to, label) {
+  const f = M.funStats(from, to);
   const C = M.cycle();
   const eqs = C.funEq && C.funEq.length && f.total != null
     ? [0, 1, 2].slice(0, Math.min(3, C.funEq.length)).map((k) => M.funLine(f.total, today(), ui.eqOffset + k)) : null;
   const row = (k, v) => `<div><dt>${k}</dt><dd>${v}</dd></div>`;
   return `
     <section class="fun-stats">
-      <h2 class="h2">For fun</h2>
+      <h2 class="h2">For fun, in ${esc(label)}</h2>
       ${eqs ? `<div class="fun">${eqs.map((e) => `<p>You have lifted ${fmtNum(e.count, 1)} ${esc(e.count === 1 ? e.name ?? e.plural : e.plural)}.</p>`).join('')}
         <p class="fine">${[...new Set(eqs.map((e) => e.note).filter(Boolean))].map(esc).join(' ')}</p>
         ${C.funEq.length > 3 ? '<button class="link" data-eq>Other comparisons</button>' : ''}</div>` : ''}
@@ -309,7 +321,11 @@ function more(kind, from, to) {
 
 function bind(root, ctx, from, to) {
   root.querySelectorAll('[data-measure]').forEach((b) => b.addEventListener('click', () => { ui.measure = b.dataset.measure; ctx.rerender(); }));
-  root.querySelectorAll('[data-range]').forEach((b) => b.addEventListener('click', () => { ui.range = b.dataset.range; ui.heat = null; ctx.rerender(); }));
+  root.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => { ui.kind = b.dataset.kind; ui.anchor = null; ui.heat = null; ui.month = null; ctx.rerender(); }));
+  root.querySelectorAll('[data-step]').forEach((b) => b.addEventListener('click', () => {
+    const per = M.periodBounds(ui.kind, ui.anchor || today());
+    ui.anchor = b.dataset.step === 'prev' ? per.prev : per.next; ui.heat = null; ui.month = null; ctx.rerender();
+  }));
   root.querySelector('[data-ex]')?.addEventListener('change', (e) => { ui.ex = e.target.value; ctx.rerender(); });
   root.querySelector('[data-month]')?.addEventListener('change', (e) => { ui.month = e.target.value; ctx.rerender(); });
   root.querySelectorAll('[data-heat]').forEach((b) => b.addEventListener('click', () => { ui.heat = addMonthKey(ui.heat, Number(b.dataset.heat)); ctx.rerender(); }));
