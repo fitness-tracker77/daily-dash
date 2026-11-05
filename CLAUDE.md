@@ -22,6 +22,7 @@ Plain HTML/CSS/ES-module JS PWA (no build, no backend). Hosted on GitHub Pages. 
 - `js/ui.js` sheets, toast, confetti, rings, `ICON`. `js/charts.js` SVG `lineChart, barChart, donut, sparkline, progressBar, haveNeed`.
 - `js/cook.js` Cook mode (`openCook`). `js/rest.js` rest timer (`startRest, stopRest, addRest, restState`).
 - `js/views/{today,train,fuel,insights,log,settings}.js` one `render*` per screen; `common.js` shared blocks (`head, warningBlock, backupBanner, recapBlock, kg, NL`).
+- Derived-only extras (no stored keys): `model.recentPrs / proteinTargetDays / weekSessions` feed Insights "Recent PRs", the protein-target line in Energy and protein, and the Train "sessions this week" dots (`.weekdots` in app.css).
 - `css/app.css` all styles. `data/SCHEMA.md` cycle.json format; `data/cycle.example.json` built-in fake cycle (`meta.example: true`).
 - `tools/make-example.mjs` regenerates the example. `tests/` node:test suites; `tests/helpers.js` loads cycles and resets the store.
 

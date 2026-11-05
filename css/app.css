@@ -474,3 +474,15 @@ body.has-rest .toast { bottom: calc(var(--tabbar) + var(--safe-b) + 84px); }
 
 /* the `font` shorthand resets numeric variants: restore lining, tabular figures on every serif number */
 .figure, .display, .h2, .h3, .heat__month, .sheet__head h2, .cook__text, .cook__clock, .ex__name, .cook__recipe, .ring__value { font-variant-numeric: lining-nums tabular-nums; }
+
+/* sessions this week (Train) */
+.weekdots { margin: 4px 0 14px; }
+.weekdots__t { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
+.weekdots ul { list-style: none; margin: 0; padding: 0; display: flex; gap: 14px; }
+.weekdots li { display: grid; justify-items: center; gap: 4px; font-size: 11px; color: var(--muted); }
+.weekdots i { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); box-sizing: border-box; }
+.weekdots .is-done i { background: var(--gold); border-color: var(--gold); }
+.weekdots .is-partial i { border-color: var(--gold); background: linear-gradient(90deg, var(--gold) 50%, transparent 50%); }
+.weekdots .is-today i { border-color: var(--gold-ink); }
+.weekdots .is-missed i { border-style: dashed; }
+.weekdots .is-done, .weekdots .is-today { color: var(--text); }

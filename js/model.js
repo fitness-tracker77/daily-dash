@@ -887,6 +887,26 @@ export function weekHeadline(w) {
   if (w.priority) return `${fmtNum(w.prSets)} sets <small>${esc(w.priority)} this week${w.prShare != null ? `, ${Math.round(w.prShare * 100)}% of all sets` : ''} · ${fmtNum(w.prKg)} kg</small>`;
   return `${fmtNum(w.totalSets)} sets <small>all groups this week · ${fmtNum(w.totalKg)} kg</small>`;
 }
+// Recent PRs: heavier than your best on any earlier date (same rule as the PR badge), newest first
+export function recentPrs(n = 5) {
+  return prs().hits.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.load - a.load)).slice(0, n);
+}
+// days with meals where protein reached the cycle's daily target; null without a target or any logged day
+export function proteinTargetDays(from, to) {
+  const t = C?.proteinTarget;
+  const days = nutritionIn(from, to);
+  if (!isNum(t) || !days.length) return null;
+  return { hit: days.filter((d) => d.protein >= t).length, of: days.length, target: t };
+}
+// planned sessions in the Monday-Sunday week of `date`: done / partial / today / upcoming / missed
+export function weekSessions(date = today()) {
+  const now = today();
+  return dateRange(weekStart(date), addDays(weekStart(date), 6)).filter((d) => C.session(d)).map((d) => {
+    const sp = sessionProgress(d);
+    const state = sp.done >= sp.planned ? 'done' : sp.done > 0 ? 'partial' : d === now ? 'today' : d > now ? 'upcoming' : 'missed';
+    return { date: d, kind: sp.kind, planned: sp.planned, done: sp.done, state };
+  });
+}
 export const exerciseTrend = (key, from, to) => exerciseDetail(key).days.filter((d) => d.date >= from && d.date <= to);
 export function nutritionIn(from, to) {
   return daysIn(from, to).filter((r) => r.meals > 0).map((r) => ({ date: r.start, kcal: r.kcal, protein: r.protein }));

@@ -35,6 +35,7 @@ export function renderInsights(root, ctx) {
     ${runBlock(from, to)}
     ${heatBlock(from, to)}
     ${reviewBlock()}
+    ${prBlock()}
     ${badgesBlock()}
     ${funBlock()}
   `;
@@ -163,6 +164,7 @@ function nutritionBlock(from, to, C) {
       ${lineChart({ points: days.map((d) => ({ date: d.date, y: d.kcal })), hLine: C.kcalTarget, x0: from, x1: to, dp: 0, unit: 'kcal', label: 'kcal per day' })}
       <p class="chartblock__key">${fmtNum(avgP, 1)} g <small>protein average${C.proteinTarget != null ? `, target ${fmtNum(C.proteinTarget)} g` : ''}</small></p>
       ${lineChart({ points: days.map((d) => ({ date: d.date, y: d.protein })), hLine: C.proteinTarget, x0: from, x1: to, dp: 0, unit: 'g', label: 'Protein per day' })}
+      ${(() => { const p = M.proteinTargetDays(from, to); return p ? `<p class="chartblock__key">${p.hit} of ${p.of} <small>days reached the ${fmtNum(p.target)} g protein target</small></p>` : ''; })()}
       <p class="fine">Only days with at least one ticked meal. Dashed: the daily target.</p>
       <button class="link" data-more="nutrition">Day by day</button>
     </section>`;
@@ -232,6 +234,16 @@ function reviewBlock() {
         ${row('Average protein', nl(r.proteinAvg, (v) => `${fmtNum(v, 1)} g`))}
         ${row('Runs', nl(r.runs, (v) => `${v.count}${v.withDistance ? `, ${fmtKg(v.km)} km` : ''}`))}
       </dl>
+    </section>`;
+}
+
+function prBlock() {
+  const list = M.recentPrs(5);
+  return `
+    <section class="badges" aria-label="Recent PRs">
+      <h2 class="h2">Recent PRs</h2>
+      ${list.length ? `<ul class="list">${list.map((h) => `<li class="is-earned"><span>${esc(h.name)} <strong>${fmtKg(h.load)} kg</strong></span><span>up from ${fmtKg(h.prev)} kg, ${fmtDate(h.date)}</span></li>`).join('')}</ul>
+      <p class="fine">A PR is a heavier set than your best on any earlier date.</p>` : '<p class="quiet">No PRs logged yet.</p>'}
     </section>`;
 }
 

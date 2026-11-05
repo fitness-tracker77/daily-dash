@@ -25,6 +25,7 @@ export function renderTrain(root, ctx) {
       </div>
       ${date !== today() ? `<p class="dayhead__meta"><button class="link" data-today>Back to today</button></p>` : ''}
     </section>
+    ${weekDots()}
     ${!ses ? `
       <p class="quiet">No session planned for ${fmtDate(date, { dow: true, long: true })}.</p>
       ${upcoming[0] ? `<button class="btn btn--line" data-goto="${upcoming[0]}">Next session, ${fmtDate(upcoming[0], { dow: true })}</button>` : ''}`
@@ -38,6 +39,17 @@ export function renderTrain(root, ctx) {
       <ol class="exercises">${ses.exercises.map((ex, xi) => exerciseBlock(date, ex, xi)).join('')}</ol>`}
   `;
   bind(root, ctx, ses);
+}
+
+const STATE_TXT = { done: 'done', partial: 'started', today: 'today', upcoming: 'planned', missed: 'not logged' };
+function weekDots() {
+  const w = M.weekSessions();
+  if (!w.length) return '';
+  const done = w.filter((x) => x.state === 'done').length;
+  return `<section class="weekdots" aria-label="Sessions this week">
+    <p class="weekdots__t">${done} of ${w.length} planned session${w.length === 1 ? '' : 's'} done this week</p>
+    <ul>${w.map((x) => `<li class="is-${x.state}" title="${fmtDate(x.date, { dow: true })}: ${STATE_TXT[x.state]}"><i></i><span>${fmtDow(x.date, true)}</span><span class="sr">${STATE_TXT[x.state]}</span></li>`).join('')}</ul>
+  </section>`;
 }
 
 function exerciseBlock(date, ex, xi) {
