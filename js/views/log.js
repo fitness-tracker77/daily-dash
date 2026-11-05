@@ -16,6 +16,8 @@ export function renderLog(root, ctx) {
   const bw = M.bodyweights();
   const last = bw[bw.length - 1] || null;
   const v = last ? M.vsPath(last) : null;
+  const avgs = M.bodyweightAverages(bw);
+  const avgNow = last ? avgs.find((x) => x.date === last.date) : null;
   const path = M.targetPath();
   const target = path ? { from: { date: path.start, y: path.from }, to: { date: path.end, y: path.to } } : null;
 
@@ -24,7 +26,8 @@ export function renderLog(root, ctx) {
     ${backupBanner()}
     <section class="hero" aria-label="Bodyweight">
       <p class="hero__figure figure" data-hero>${last ? fmtKg(last.kg) : '—'}<span class="hero__of"> kg</span></p>
-      <p class="hero__label">${last ? `latest weigh-in, ${fmtDate(last.date, { dow: true })}${v ? `, ${fmtNum(Math.abs(v.diff), 1)} kg ${v.side === 'on' ? 'on' : v.side} the target path` : ''}` : `bodyweight ${NL}`}</p>
+      <p class="hero__label">${last ? `latest ${fmtKg(last.kg)} kg${avgNow ? ` · 7-day average ${fmtNum(avgNow.y, 1)} kg` : ''}` : `bodyweight ${NL}`}</p>
+      ${last ? `<p class="hero__sub">${fmtDate(last.date, { dow: true })}${v ? `, ${fmtNum(Math.abs(v.diff), 1)} kg ${v.side === 'on' ? 'on' : v.side} the target path` : ''}</p>` : ''}
     </section>
     <form class="form form--row" data-bw>
       <label class="field"><span>Date</span><input type="date" name="date" value="${t}" max="${t}" required></label>
@@ -32,8 +35,8 @@ export function renderLog(root, ctx) {
       <button class="btn btn--gold" type="submit">Save</button>
     </form>
     ${bw.length ? `<section class="chartblock" data-chart="bw-log">
-      ${lineChart({ points: bw.map((b) => ({ date: b.date, y: b.kg, mark: M.vsPath(b)?.side })), target, unit: 'kg', minSpan: 2, tickStep: 0.5, tickDp: 1, label: 'Bodyweight and target path' })}
-      <p class="fine">${target ? 'Dashed: the straight target path from cycle.json. Filled dots above it, hollow below.' : 'No target path in cycle.json.'}</p></section>` : ''}
+      ${lineChart({ points: bw.map((b) => ({ date: b.date, y: b.kg, mark: M.vsPath(b)?.side })), target, unit: 'kg', minSpan: 2, tickStep: 0.5, tickDp: 1, avg: avgs, joinPoints: false, label: 'Bodyweight 7-day average, daily weigh-ins and target path' })}
+      <p class="fine">Line: 7-day average (needs 3 readings in 7 days). Dots: daily weigh-ins, filled above the target path, hollow below. ${target ? 'Dashed: the straight target path from cycle.json.' : 'No target path in cycle.json.'}</p></section>` : ''}
 
     <section class="entries" aria-label="Entries">
       <h2 class="h2">Entries</h2>

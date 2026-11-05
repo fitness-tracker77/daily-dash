@@ -147,8 +147,8 @@ function bodyweightBlock(from, to) {
     <section class="chartblock" data-chart="bodyweight" data-from="${from}" data-to="${to}">
       <h2 class="h2">Bodyweight</h2>
       ${last ? `<p class="chartblock__key">${fmtKg(last.kg)} kg <small>${fmtDate(last.date)}${v ? `, ${fmtNum(Math.abs(v.diff), 1)} kg ${v.side === 'on' ? 'on' : v.side} the path` : ''}</small></p>
-        ${lineChart({ points: pts, target, x0: from, x1: to, unit: 'kg', minSpan: 2, tickStep: 0.5, tickDp: 1, label: 'Bodyweight and target path' })}
-        <p class="fine">${path ? `Dashed: straight path from ${fmtKg(path.from)} kg on ${fmtDate(path.start)} to ${fmtKg(path.to)} kg on ${fmtDate(path.end)}. Filled dots are above it, hollow dots below.` : 'No target path: bodyweight_start_kg or bodyweight_target_kg is missing in cycle.json.'}</p>
+        ${lineChart({ points: pts, target, x0: from, x1: to, unit: 'kg', minSpan: 2, tickStep: 0.5, tickDp: 1, avg: M.bodyweightAverages().filter((a) => a.date >= from && a.date <= to), joinPoints: false, label: 'Bodyweight 7-day average, daily weigh-ins and target path' })}
+        <p class="fine">${path ? `Dashed: straight path from ${fmtKg(path.from)} kg on ${fmtDate(path.start)} to ${fmtKg(path.to)} kg on ${fmtDate(path.end)}. Line: 7-day average (needs 3 readings in 7 days). Dots: daily weigh-ins, filled above the path, hollow below.` : 'No target path: bodyweight_start_kg or bodyweight_target_kg is missing in cycle.json.'}</p>
         <button class="link" data-more="bodyweight">All entries</button>`
       : `<p class="quiet">${NL} in this range.</p>`}
     </section>`;

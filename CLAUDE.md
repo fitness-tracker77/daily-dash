@@ -24,6 +24,7 @@ Plain HTML/CSS/ES-module JS PWA (no build, no backend). Hosted on GitHub Pages. 
 - `js/cook.js` Cook mode (`openCook`). `js/rest.js` rest timer (`startRest, stopRest, addRest, restState`).
 - `js/views/{today,train,fuel,insights,log,settings}.js` one `render*` per screen; `common.js` shared blocks (`head, warningBlock, backupBanner, recapBlock, kg, NL`).
 - Derived-only extras (no stored keys): `model.recentPrs / proteinTargetDays / weekSessions` feed Insights "Recent PRs", the protein-target line in Energy and protein, and the Train "sessions this week" dots (`.weekdots` in app.css).
+- Derived-only extras (cont.): `model.todayAgenda` (Today "Still open" above "Next up"), `model.muscleView(from,to,'sets'|'kg')` (Insights muscle card: bars, donut, legend and headline share one measure), `model.bodyweightAverages` (7-day average: mean of readings in the last 7 calendar days, none under 3 readings; Log and Insights bodyweight charts draw it as the line with daily weigh-ins as faint dots), `charts.placeLabel` (value label never covers a dot).
 - `css/app.css` all styles. `data/SCHEMA.md` cycle.json format; `data/cycle.example.json` built-in fake cycle (`meta.example: true`).
 - `tools/make-example.mjs` regenerates the example. `tests/` node:test suites; `tests/helpers.js` loads cycles and resets the store.
 
@@ -32,7 +33,7 @@ Plain HTML/CSS/ES-module JS PWA (no build, no backend). Hosted on GitHub Pages. 
 - `grams` `${date}|${slotKey}`: typed grams `{g:{idx:grams}}`.
 - `sets` `${date}|@${pos}|${i}` (pos = card index in the file's exercise list for that day, so a repeated exercise has separate sets): `{date, pos, occ, ex, name, muscle, idx, done, reps, load, ts}` (occ = 1st/2nd... card with that id that day). Old `date|exId|i` keys are moved to the FIRST card of that id by `model.migratePositionKeys()` (run in `applyCycle`, so after import and restore; unmatched rows keep their old key).
 - `exlog` `${date}|@${pos}`: `{date, pos, occ, ex, name, effort, note}`. `model.reconcilePositions()` runs BEFORE the migration in `applyCycle`: a record whose card now has another exercise id is re-attached to the card with its id and same occ, else moved to the unmatched old-form key (`date|exId|i`); days without a session are left alone. History/PRs/volume group by the `ex` id, never by key; use `exLogFor(date, id)` to merge cards.
-- `runs` `${date}|run`. `bodyweight` `${date}` `{kg, ts}`.
+- `runs` `${date}|run`. `bodyweight` `${date}` `{kg, ts, note?}`. Imported history sets (`js/history.js`) are `${date}|${exId}|${idx}` with no `pos`, never shown on a card, counted everywhere else.
 - `pantry` `${item_id}`: `{quantity, source: counted|calculated, as_of, baseSig}`.
 - `pantryEvents` random `uid()`: `{date, ts, item_id, kind: recount|bought|cooked, amount, unit}` (cooked = cook-slot `yields`; the tick snapshot keeps `yielded` so untick reverses it).
 - `days` `${date}`: `{planned, done, complete}` snapshot (keeps streaks across cycles).

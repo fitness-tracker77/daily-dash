@@ -666,6 +666,17 @@ export function addBodyweight(date, kg) {
 }
 export function deleteBodyweight(key) { store.del('bodyweight', key); }
 export const bodyweights = () => cached('bw', () => store.values('bodyweight').filter((b) => isValidDate(b.date) && isNum(b.kg)).sort((a, b) => (a.date < b.date ? -1 : 1)));
+// 7-day average: for each weigh-in date, the mean of the readings in the 7 calendar days up to and including
+// that date. No point when that window holds fewer than 3 readings. Never interpolates across gaps.
+export function bodyweightAverages(list = bodyweights()) {
+  const out = [];
+  for (const b of list) {
+    const from = addDays(b.date, -6);
+    const win = list.filter((x) => x.date >= from && x.date <= b.date);
+    if (win.length >= 3) out.push({ date: b.date, y: sum(win.map((x) => x.kg)) / win.length, n: win.length });
+  }
+  return out;
+}
 export function latestBodyweight() { const b = bodyweights(); return b.length ? b[b.length - 1] : null; }
 // straight path from bodyweight_start_kg on start_date to bodyweight_target_kg on end_date
 export function targetPath() {

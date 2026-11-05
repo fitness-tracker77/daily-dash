@@ -34,3 +34,11 @@ test('a 0.2 kg move fills well under a quarter of the axis', () => {
   const a = axisFor([66.5, 66.7], { minSpan: 2, tickStep: 0.5 });
   assert.ok(0.2 / (a.hi - a.lo) <= 0.1 + 1e-9);
 });
+
+test('a very wide axis thins the ticks to stay readable; normal spans keep 0.5 kg', () => {
+  const wide = axisFor([66, 72], { minSpan: 2, tickStep: 0.5 });
+  assert.ok(wide.ticks.length <= 10);
+  assert.ok(wide.ticks.every((t, i) => i === 0 || Math.abs(t - wide.ticks[i - 1] - 1) < 1e-9 || Math.abs(t - wide.ticks[i - 1] - 2) < 1e-9));
+  const normal = axisFor([66.1, 66.7], { minSpan: 2, tickStep: 0.5 });
+  assert.deepEqual(normal.ticks, [65.5, 66, 66.5, 67]);
+});

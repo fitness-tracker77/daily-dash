@@ -20,12 +20,26 @@ function niceTicks(lo, hi) {
 
 // y-axis for a chart that must not exaggerate small changes: at least `minSpan` units tall, centred on the
 // data (and target path), ticks every `tickStep`. Everything in `vals` is always inside [lo, hi].
+// Place a value label beside a selected point without covering any dot: above, below, left, then right.
+// Returns the rectangle { x, y } for a label of size w x h; `dots` are { x, y } centres (radius ~6).
+export function placeLabel({ cx, cy, w, h = 19, dots = [], minX = 0, maxX = 340, minY = 2, maxY = 168, r = 7 }) {
+  const cands = [[cx - w / 2, cy - h - 9], [cx - w / 2, cy + 9], [cx - w - 9, cy - h / 2], [cx + 9, cy - h / 2]];
+  const clamp = (c) => [Math.min(maxX - w, Math.max(minX, c[0])), Math.min(maxY - h, Math.max(minY, c[1]))];
+  const hits = ([x, y]) => [...dots, { x: cx, y: cy }].filter((d) => d.x > x - r && d.x < x + w + r && d.y > y - r && d.y < y + h + r).length;
+  let best = null;
+  for (const c of cands) { const p = clamp(c); const n = hits(p); if (n === 0) return { x: p[0], y: p[1] }; if (!best || n < best.n) best = { n, x: p[0], y: p[1] }; }
+  return { x: best.x, y: best.y };
+}
+
 export function axisFor(vals, { minSpan, tickStep }) {
   let lo = Math.min(...vals), hi = Math.max(...vals);
   if (hi - lo < minSpan) { const c = (lo + hi) / 2; lo = c - minSpan / 2; hi = c + minSpan / 2; }
   else { const pad = (hi - lo) * 0.08; lo -= pad; hi += pad; }
+  // every `tickStep`; a very wide axis (e.g. a far-away target path) doubles the spacing so labels stay readable
+  let stride = 1;
+  while ((hi - lo) / (tickStep * stride) > 9) stride *= 2;
   const ticks = [];
-  for (let k = Math.ceil(lo / tickStep - 1e-9); k * tickStep <= hi + 1e-9; k++) ticks.push(+(k * tickStep).toFixed(6));
+  for (let k = Math.ceil(lo / (tickStep * stride) - 1e-9); k * tickStep * stride <= hi + 1e-9; k++) ticks.push(+(k * tickStep * stride).toFixed(6));
   return { lo, hi, ticks };
 }
 
@@ -39,7 +53,7 @@ function frame(height, ticks, y, dp) {
 }
 
 // points: [{date, y, mark?: 'pr' | 'above' | 'below' | 'on'}]; target: {from:{date,y}, to:{date,y}}; hLine: horizontal target
-export function lineChart({ points, target = null, hLine = null, x0 = null, x1 = null, highlight = 'last', unit = '', dp = 1, height = 170, label = 'Chart', tickDp = null, minSpan = null, tickStep = null }) {
+export function lineChart({ points, target = null, hLine = null, x0 = null, x1 = null, highlight = 'last', unit = '', dp = 1, height = 170, label = 'Chart', tickDp = null, minSpan = null, tickStep = null, avg = null, joinPoints = true }) {
   const pts = points.filter((p) => isNum(p.y));
   if (!pts.length && !target) return '';
   const id = `g${++gid}`;
@@ -51,6 +65,8 @@ export function lineChart({ points, target = null, hLine = null, x0 = null, x1 =
   const vals = pts.map((p) => p.y);
   if (target) vals.push(target.from.y, target.to.y);
   if (isNum(hLine)) vals.push(hLine);
+  const avgPts = (avg || []).filter((p) => isNum(p.y));
+  for (const p of avgPts) vals.push(p.y);
   let lo = Math.min(...vals), hi = Math.max(...vals), ticks;
   if (minSpan && tickStep) ({ lo, hi, ticks } = axisFor(vals, { minSpan, tickStep }));
   else {
@@ -68,23 +84,28 @@ export function lineChart({ points, target = null, hLine = null, x0 = null, x1 =
   if (d1 !== d0) s += `<text class="chart__tick" x="${R}" y="${height - 5}" text-anchor="end">${fmtDate(d1)}</text>`;
   if (target) s += `<line class="chart__target" x1="${x(target.from.date)}" y1="${y(target.from.y)}" x2="${x(target.to.date)}" y2="${y(target.to.y)}"/>`;
   if (isNum(hLine)) s += `<line class="chart__target" x1="${L}" y1="${y(hLine)}" x2="${R}" y2="${y(hLine)}"/>`;
-  if (pts.length > 1) {
-    const line = pts.map((p) => `${x(p.date).toFixed(1)},${y(p.y).toFixed(1)}`).join(' ');
-    s += `<polygon class="chart__area" fill="url(#${id})" points="${x(pts[0].date).toFixed(1)},${B} ${line} ${x(pts[pts.length - 1].date).toFixed(1)},${B}"/>`;
+  const lineSrc = avg ? avgPts : joinPoints ? pts : [];
+  if (avg && avgPts.length === 1) s += `<circle class="chart__hi" cx="${x(avgPts[0].date).toFixed(1)}" cy="${y(avgPts[0].y).toFixed(1)}" r="3.4"/>`;
+  if (lineSrc.length > 1) {
+    const line = lineSrc.map((p) => `${x(p.date).toFixed(1)},${y(p.y).toFixed(1)}`).join(' ');
+    s += `<polygon class="chart__area" fill="url(#${id})" points="${x(lineSrc[0].date).toFixed(1)},${B} ${line} ${x(lineSrc[lineSrc.length - 1].date).toFixed(1)},${B}"/>`;
     s += `<polyline class="chart__line" points="${line}"/>`;
   }
+  if (avg) s += '<g class="chart__faint">';
   pts.forEach((p, i) => {
     const cx = x(p.date).toFixed(1), cy = y(p.y).toFixed(1);
     if (p.mark === 'pr') s += `<circle class="chart__pr" cx="${cx}" cy="${cy}" r="6.5"/>`;
     if (p.mark === 'above' || p.mark === 'below' || p.mark === 'on') s += `<circle class="chart__mark is-${p.mark}" cx="${cx}" cy="${cy}" r="3.4"/>`;
     else if (i !== hiIdx && pts.length <= 40) s += `<circle class="chart__dot" cx="${cx}" cy="${cy}" r="2.6"/>`;
   });
+  if (avg) s += '</g>';
   if (hiIdx >= 0) {
     const p = pts[hiIdx];
     const cx = x(p.date), cy = y(p.y);
     const label2 = `${fmt(p.y)}${unit && unit.length <= 4 ? ` ${unit}` : ''}`;
     const w = 12 + label2.length * 6.4;
-    const bx = Math.min(R - w, Math.max(L, cx - w / 2)), by = cy - 30 < 2 ? cy + 10 : cy - 28;
+    const dots = [...pts.filter((q, k) => k !== hiIdx).map((q) => ({ x: x(q.date), y: y(q.y) })), ...avgPts.map((q) => ({ x: x(q.date), y: y(q.y) }))];
+    const { x: bx, y: by } = placeLabel({ cx, cy, w, dots, minX: L - 4, maxX: W - 2, minY: 2, maxY: height - 24 });
     s += `<circle class="chart__hi" cx="${cx}" cy="${cy}" r="5"><title>${fmtDate(p.date)}: ${fmt(p.y)} ${esc(unit)}</title></circle>`;
     s += `<g class="chart__bubble"><rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${w.toFixed(1)}" height="19" rx="9.5"/><text x="${(bx + w / 2).toFixed(1)}" y="${(by + 13).toFixed(1)}" text-anchor="middle">${esc(label2)}</text></g>`;
   }
