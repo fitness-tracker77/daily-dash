@@ -495,3 +495,5 @@ body.has-rest .toast { bottom: calc(var(--tabbar) + var(--safe-b) + 84px); }
 .period { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 8px 0 2px; }
 .period__name { min-width: 11ch; text-align: center; font-weight: 600; font-size: 15px; }
 .period .icon-btn:disabled { opacity: .3; }
+.milestone { margin: 10px 0 4px; padding: 14px var(--panel); border: 1px solid var(--gold); border-radius: var(--radius); background: var(--surface); }
+.milestone__n { margin: 0; font-size: 20px; font-weight: 700; color: var(--gold-ink); }

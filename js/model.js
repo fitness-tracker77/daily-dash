@@ -1174,22 +1174,54 @@ export function weekRecap(date) {
   const from = weekStart(date);
   const days = dateRange(from, date);
   const plannedDays = days.filter((d) => progress(d).planned > 0);
-  const r = rollup(`w:${from}`);
+  const rows = daysIn(from, date);
+  const lifted = rows.filter((r) => r.sets > 0);
+  const t = today();
+  const meals = rows.filter((r) => r.meals > 0 && r.start < t); // today is left out until it is over
+  const tgt = C?.proteinTarget;
+  // weight change of the 7-day average: latest average this week against the one 7 days before it
+  const avgs = bodyweightAverages();
+  const inWeek = avgs.filter((a) => a.date >= from && a.date <= date);
+  const nowAvg = inWeek[inWeek.length - 1] || null;
+  const thenAvg = nowAvg ? avgs.find((a) => a.date === addDays(nowAvg.date, -7)) || null : null;
   return {
     from, to: date,
     completed: plannedDays.filter((d) => progress(d).complete).length, plannedDays: plannedDays.length,
-    kcalAvg: r && r.mealDays ? r.kcal / r.mealDays : null,
-    proteinAvg: r && r.mealDays ? r.protein / r.mealDays : null,
-    mealDays: r?.mealDays || 0,
-    sessions: r ? r.sessions + r.runs : null,
-    volume: r && r.sets > 0 ? r.volume : null,
-    prs: r && r.sets > 0 ? r.prs : null,
+    kcalAvg: meals.length ? sum(meals.map((r) => r.kcal)) / meals.length : null,
+    proteinAvg: meals.length ? sum(meals.map((r) => r.protein)) / meals.length : null,
+    mealDays: meals.length,
+    proteinTargetDays: isNum(tgt) && meals.length ? { hit: meals.filter((r) => r.protein >= tgt).length, of: meals.length, target: tgt } : null,
+    todaySoFar: date === t ? todaySoFar() : null,
+    sessions: rows.some((r) => r.sets > 0 || r.runs > 0) ? sum(rows.map((r) => (r.sets > 0 ? 1 : 0) + r.runs)) : null, // incl. runs
+    sets: lifted.length ? sum(lifted.map((r) => r.sets)) : null,
+    volume: lifted.length ? sum(lifted.map((r) => r.volume)) : null,
+    prs: lifted.length ? sum(lifted.map((r) => r.prs)) : null,
+    weightAvgChange: nowAvg && thenAvg ? { diff: nowAvg.y - thenAvg.y, now: nowAvg.y, then: thenAvg.y } : null,
   };
 }
 
 // ======================================================================
 // CELEBRATIONS (once per date)
 // ======================================================================
+// A new PR the moment its set is ticked: { name, load, was } the first time only (never again for that set, even after untick/retick or a reload)
+export function celebratePr(date, rec) {
+  const p = prs();
+  if (!rec || !p.ids.has(rec.key)) return null;
+  const hit = p.hits.find((h) => h.date === date && h.ex === rec.ex);
+  if (!hit || !celebrateOnce(date, `pr:${rec.ex}:${rec.load}`)) return null;
+  return { name: rec.name, load: rec.load, was: hit.prev };
+}
+// Streak milestones (3, 7, 14, 30 days): the one-time card is due when the current streak is exactly a milestone and it has not been shown
+export const STREAK_MILESTONES = [3, 7, 14, 30];
+export function pendingMilestone() {
+  const sk = streaks();
+  if (!STREAK_MILESTONES.includes(sk.current)) return null;
+  const run = sk.runs.find((r) => r.run === sk.current);
+  if (!run) return null;
+  return { n: sk.current, date: run.date, seen: !!(store.kv('celebrated') || {})[run.date]?.[`streak${sk.current}`] };
+}
+export function markMilestoneSeen(m) { return celebrateOnce(m.date, `streak${m.n}`); }
+
 export function celebrateOnce(date, kind) {
   const c = { ...(store.kv('celebrated') || {}) };
   const d = { ...(c[date] || {}) };

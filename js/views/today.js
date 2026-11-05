@@ -1,13 +1,14 @@
 import * as M from '../model.js';
 import { slotKey } from '../data.js';
 import { esc, fmtNum, fmtKg, fmtDate, fmtDow, parseDate, fmtMonth, today, addDays, daysBetween, isNum, num, haptic } from '../util.js';
-import { ringHTML, animateRings, openSheet, toast, ICON } from '../ui.js';
+import { ringHTML, animateRings, openSheet, toast, ICON, confetti } from '../ui.js';
 import { barChart, progressBar } from '../charts.js';
 import { openCook } from '../cook.js';
 import { head, warningBlock, backupBanner, recapBlock } from './common.js';
 
 const editing = new Set();     // `${date}|${slotKey}` rows with gram inputs open
 let justTicked = null;
+let milestoneCard = null;   // streak milestone being shown (set once, when first reached; never again after a reload)
 const TYPE_LABEL = { meal: 'Meal', gym: 'Training', cook: 'Cook', freezer: 'Freezer', note: 'Note' };
 const tickable = (s) => s.type === 'meal' || s.type === 'cook' || s.type === 'freezer';
 
@@ -24,6 +25,10 @@ export function renderToday(root, ctx) {
   const prog = M.progress(date);
   const agenda = date === t ? M.todayAgenda(date) : { open: [], next: null };
   const next = agenda.next;
+  let freshMilestone = false;
+  const pm = date === t ? M.pendingMilestone() : null;
+  if (pm && !pm.seen) { milestoneCard = pm.n; M.markMilestoneSeen(pm); freshMilestone = true; }
+  if (date !== t) milestoneCard = null;
 
   root.innerHTML = `
     ${head(ctx, `<span class="streak" title="Days in a row with everything planned done">Streak <strong>${sk.current}</strong> day${sk.current === 1 ? '' : 's'}</span>`)}
@@ -41,6 +46,10 @@ export function renderToday(root, ctx) {
         ${date !== t ? `<button class="link" data-act="today">Back to today</button>` : ''}
       </p>
     </section>
+    ${milestoneCard ? `<section class="milestone" data-milestone aria-label="Streak milestone">
+      <p class="milestone__n">${milestoneCard}-day streak</p>
+      <p class="sub">${milestoneCard} days in a row with everything planned done. Badge earned.</p>
+      <button class="link" data-dismiss-ms>Nice</button></section>` : ''}
     ${backupBanner()}
     ${warningBlock(ctx)}
     <section class="hero hero--rings" aria-label="Eaten">
@@ -60,6 +69,7 @@ export function renderToday(root, ctx) {
     ${M.isRecapDay(date) && (prog.planned || M.logDates().length) ? recapBlock(M.weekRecap(date)) : ''}
   `;
   animateRings(root);
+  if (freshMilestone) { confetti(root.querySelector('[data-milestone]')); haptic([15, 40, 15]); }
   if (justTicked) { root.querySelector(`[data-key="${CSS.escape(justTicked)}"]`)?.classList.add('just'); justTicked = null; }
   bind(root, ctx, slots);
 }
@@ -145,6 +155,7 @@ function doTick(ctx, date, s) {
 }
 
 function bind(root, ctx, slots) {
+  root.querySelector('[data-dismiss-ms]')?.addEventListener('click', () => { milestoneCard = null; ctx.rerender(); });
   const date = ctx.date; const C = M.cycle();
   root.querySelector('[data-act="prev"]').onclick = () => ctx.setDate(addDays(date, -1), -1);
   root.querySelector('[data-act="next"]').onclick = () => ctx.setDate(addDays(date, 1), 1);

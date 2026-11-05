@@ -1,7 +1,7 @@
 import * as M from '../model.js';
 import { exKey } from '../data.js';
 import { esc, fmtNum, fmtKg, fmtDate, fmtDow, today, addDays, isNum, num, haptic, fmtClock, parseClock, fmtPace } from '../util.js';
-import { openSheet, toast, ICON } from '../ui.js';
+import { openSheet, toast, ICON, confetti } from '../ui.js';
 import { lineChart, sparkline, progressBar, barChart } from '../charts.js';
 import { startRest, stopRest } from '../rest.js';
 import { head } from './common.js';
@@ -154,7 +154,8 @@ function bind(root, ctx, ses) {
     const sp = M.sessionProgress(date);
     const isPr = on && M.prs().ids.has(M.setKeyOf(date, ex, i));
     ctx.afterChange(date, before);
-    if (isPr) toast(`PR: ${ex.name}, ${fmtKg(M.setRec(date, ex, i).load)} kg`);
+    const pr = isPr ? M.celebratePr(date, M.setRec(date, ex, i)) : null;
+    if (pr) { toast(`PR: ${pr.name} ${fmtKg(pr.load)} kg (was ${fmtKg(pr.was)})`); confetti(); haptic([10, 30, 10]); }
     if (on && sp.done >= sp.planned) { stopRest(); summarySheet(date); return; }
     if (on && M.settings().autoRest) startRest(ex.rest ?? M.settings().restDefault, ex.name);
   }));

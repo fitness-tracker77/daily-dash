@@ -56,11 +56,15 @@ export function recapBlock(r) {
       <p class="sub">${fmtDate(r.from)} to ${fmtDate(r.to)}, from what you logged</p>
       <dl class="facts">
         ${row('Days completed', `${r.completed} of ${r.plannedDays}`)}
-        ${row('Average kcal', nl(r.kcalAvg, (v) => `${fmtNum(v)} <small>over ${r.mealDays} day${r.mealDays === 1 ? '' : 's'}</small>`))}
+        ${row('Average kcal', nl(r.kcalAvg, (v) => `${fmtNum(v)} <small>over ${r.mealDays} completed day${r.mealDays === 1 ? '' : 's'}</small>`))}
         ${row('Average protein', nl(r.proteinAvg, (v) => `${fmtNum(v, 1)} g`))}
+        ${row('Protein target reached', r.proteinTargetDays ? `${r.proteinTargetDays.hit} of ${r.proteinTargetDays.of} <small>completed days</small>` : NL)}
         ${row('Sessions <small>incl. runs</small>', nl(r.sessions || null, (v) => fmtNum(v)))}
+        ${row('Sets', nl(r.sets, (v) => fmtNum(v)))}
         ${row('Volume', nl(r.volume, (v) => `${fmtNum(v)} kg`))}
         ${row('PRs', nl(r.prs, (v) => fmtNum(v)))}
+        ${row('Weight, 7-day average', r.weightAvgChange ? `${r.weightAvgChange.diff > 0 ? '+' : r.weightAvgChange.diff < 0 ? '−' : ''}${fmtNum(Math.abs(r.weightAvgChange.diff), 1)} kg <small>${fmtNum(r.weightAvgChange.then, 1)} to ${fmtNum(r.weightAvgChange.now, 1)}</small>` : NL)}
+        ${r.todaySoFar ? row('Today so far', `${fmtNum(r.todaySoFar.kcal)} kcal, ${fmtNum(r.todaySoFar.protein, 1)} g protein`) : ''}
       </dl>
     </section>`;
 }
