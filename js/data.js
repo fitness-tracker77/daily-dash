@@ -212,6 +212,8 @@ export class Cycle {
     const exercises = s.exercises.map((e, pos) => ({ e, pos })).filter(({ e }) => typeof e?.name === 'string' && Number.isInteger(e?.sets) && e.sets > 0)
       .map(({ e, pos }) => ({ ...e, pos, muscle: typeof e.muscle_group === 'string' && e.muscle_group.trim() ? e.muscle_group.trim().toLowerCase() : null,
         rest: isNum(e.rest_seconds) && e.rest_seconds > 0 ? e.rest_seconds : null }));
+    const seen = new Map(); // occ = 1 for the first card with an exercise id that day, 2 for the second...
+    for (const e of exercises) { const k = exKey(e); seen.set(k, (seen.get(k) || 0) + 1); e.occ = seen.get(k); }
     return exercises.length ? { ...s, kind: 'lift', exercises } : null;
   }
   recipe(id) { const r = this.recipes[id]; return r && Array.isArray(r.steps) && r.steps.length ? r : null; }

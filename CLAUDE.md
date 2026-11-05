@@ -28,8 +28,8 @@ Plain HTML/CSS/ES-module JS PWA (no build, no backend). Hosted on GitHub Pages. 
 ## Store keys (collections in store.js; records always carry `key`)
 - `meals` `${date}|${slotKey}` (slotKey = `id:<slot.id>` or `time|type|slug(title)`): tick snapshot with items, grams, `deducted` pantry amounts.
 - `grams` `${date}|${slotKey}`: typed grams `{g:{idx:grams}}`.
-- `sets` `${date}|@${pos}|${i}` (pos = card index in the file's exercise list for that day, so a repeated exercise has separate sets): `{date, pos, ex, name, muscle, idx, done, reps, load, ts}`. Old `date|exId|i` keys are moved to the FIRST card of that id by `model.migratePositionKeys()` (run in `applyCycle`, so after import and restore; unmatched rows keep their old key).
-- `exlog` `${date}|@${pos}`: `{date, pos, ex, name, effort, note}`. History/PRs/volume group by the `ex` id, never by key; use `exLogFor(date, id)` to merge cards.
+- `sets` `${date}|@${pos}|${i}` (pos = card index in the file's exercise list for that day, so a repeated exercise has separate sets): `{date, pos, occ, ex, name, muscle, idx, done, reps, load, ts}` (occ = 1st/2nd... card with that id that day). Old `date|exId|i` keys are moved to the FIRST card of that id by `model.migratePositionKeys()` (run in `applyCycle`, so after import and restore; unmatched rows keep their old key).
+- `exlog` `${date}|@${pos}`: `{date, pos, occ, ex, name, effort, note}`. `model.reconcilePositions()` runs BEFORE the migration in `applyCycle`: a record whose card now has another exercise id is re-attached to the card with its id and same occ, else moved to the unmatched old-form key (`date|exId|i`); days without a session are left alone. History/PRs/volume group by the `ex` id, never by key; use `exLogFor(date, id)` to merge cards.
 - `runs` `${date}|run`. `bodyweight` `${date}` `{kg, ts}`.
 - `pantry` `${item_id}`: `{quantity, source: counted|calculated, as_of, baseSig}`.
 - `pantryEvents` random `uid()`: `{date, ts, item_id, kind: recount|bought|cooked, amount, unit}` (cooked = cook-slot `yields`; the tick snapshot keeps `yielded` so untick reverses it).

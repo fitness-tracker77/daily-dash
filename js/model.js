@@ -343,11 +343,13 @@ export function shoppingList() {
 // (Old keys were `${date}|${exId}|${i}`; migratePositionKeys moves them. History always groups by the `ex` id on the record.)
 export const setKeyOf = (date, ex, i) => `${date}|@${ex.pos ?? 0}|${i}`;
 const exlogKeyOf = (date, ex) => `${date}|@${ex.pos ?? 0}`;
-export const setRec = (date, ex, i) => store.get('sets', setKeyOf(date, ex, i));
+// a record found at a card's position only belongs to that card if it is the same exercise
+const sameEx = (r, ex) => (r && r.ex === exKey(ex) ? r : null);
+export const setRec = (date, ex, i) => sameEx(store.get('sets', setKeyOf(date, ex, i)), ex);
 const muscleFor = (ex) => ex.muscle ?? C?.muscleOf.get(exKey(ex)) ?? null;
 
 function baseSet(date, ex, i) {
-  return setRec(date, ex, i) || { key: setKeyOf(date, ex, i), date, pos: ex.pos ?? 0, ex: exKey(ex), name: ex.name, muscle: muscleFor(ex), idx: i, done: false, reps: null, load: null, ts: 0 };
+  return setRec(date, ex, i) || { key: setKeyOf(date, ex, i), date, pos: ex.pos ?? 0, occ: ex.occ ?? 1, ex: exKey(ex), name: ex.name, muscle: muscleFor(ex), idx: i, done: false, reps: null, load: null, ts: 0 };
 }
 export function setDraft(date, ex, i, field, value) {
   const r = { ...baseSet(date, ex, i) };
@@ -447,7 +449,7 @@ export function prefill(date, ex, i) {
 }
 
 // effort (1-10) and a note per exercise per date
-export const exLog = (date, ex) => store.get('exlog', exlogKeyOf(date, ex));
+export const exLog = (date, ex) => sameEx(store.get('exlog', exlogKeyOf(date, ex)), ex);
 function writeExLog(key, cur, patch) {
   const next = { ...cur, ...patch, ts: Date.now() };
   if (!isNum(next.effort) && !String(next.note || '').trim()) store.del('exlog', key);
@@ -455,7 +457,49 @@ function writeExLog(key, cur, patch) {
 }
 export function setExLog(date, ex, patch) {
   const key = exlogKeyOf(date, ex);
-  writeExLog(key, store.get('exlog', key) || { key, date, pos: ex.pos ?? 0, ex: exKey(ex), name: ex.name, effort: null, note: '' }, patch);
+  writeExLog(key, exLog(date, ex) || { key, date, pos: ex.pos ?? 0, occ: ex.occ ?? 1, ex: exKey(ex), name: ex.name, effort: null, note: '' }, patch);
+}
+// Ticks follow card position, so a re-import that inserts/reorders/removes exercises on a logged day must not
+// leave a tick on a different exercise. Each record is checked against the card at its stored position; if that
+// card has another exercise id it is re-attached to the card with ITS id, same occurrence (1st Leg curl stays the
+// 1st). No card with that id: it moves to the unmatched form (old key `date|exId|i`), still in history and totals,
+// never shown on another exercise. Days with no session in the file are left alone. Safe to re-run.
+export function reconcilePositions() {
+  const out = { reattached: 0, unmatched: 0, stamped: 0 };
+  if (!C || C.isExample) return out;
+  const moves = [];
+  for (const coll of ['sets', 'exlog']) {
+    for (const r of store.values(coll)) {
+      if (OLD_KEY(r.key) || !Number.isInteger(r.pos)) continue;
+      const cards = C.session(r.date)?.exercises;
+      if (!cards?.length) continue;
+      const here = cards.find((c) => c.pos === r.pos);
+      if (here && exKey(here) === r.ex) { if (r.occ !== here.occ) { moves.push({ coll, r, stamp: here.occ }); out.stamped++; } continue; }
+      const same = cards.filter((c) => exKey(c) === r.ex);
+      moves.push({ coll, r, to: same.length ? same[Math.min(Math.max(1, r.occ || 1), same.length) - 1] : null });
+    }
+  }
+  const keyFor = (coll, r, pos) => (coll === 'sets' ? `${r.date}|@${pos}|${r.idx}` : `${r.date}|@${pos}`);
+  const leaving = new Set(moves.filter((m) => !('stamp' in m)).map((m) => `${m.coll}|${m.r.key}`));
+  const taken = new Set();
+  for (const coll of ['sets', 'exlog']) for (const r of store.values(coll)) if (!leaving.has(`${coll}|${r.key}`)) taken.add(`${coll}|${r.key}`);
+  const puts = [];
+  for (const m of moves) {
+    if ('stamp' in m) { store.put(m.coll, { ...m.r, occ: m.stamp }); continue; }
+    let key = null;
+    if (m.to) { key = keyFor(m.coll, m.r, m.to.pos); if (taken.has(`${m.coll}|${key}`)) key = null; }
+    if (key) { taken.add(`${m.coll}|${key}`); puts.push({ coll: m.coll, old: m.r.key, rec: { ...m.r, key, pos: m.to.pos, occ: m.to.occ } }); out.reattached++; continue; }
+    // unmatched form: the pre-position key, with pos dropped
+    const base = m.coll === 'sets' ? `${m.r.date}|${m.r.ex}|${m.r.idx}` : `${m.r.date}|${m.r.ex}`;
+    let uk = base, n = 0;
+    while (taken.has(`${m.coll}|${uk}`)) uk = `${base}~${++n}`;
+    taken.add(`${m.coll}|${uk}`);
+    const { pos, occ, ...rest } = m.r; // eslint-disable-line no-unused-vars
+    puts.push({ coll: m.coll, old: m.r.key, rec: { ...rest, key: uk } }); out.unmatched++;
+  }
+  for (const p of puts) store.del(p.coll, p.old);
+  for (const p of puts) wput(p.coll, p.rec);
+  return out;
 }
 export function editExLog(key, patch) { const cur = store.get('exlog', key); if (cur) writeExLog(key, cur, patch); }
 // effort and notes for one exercise id on a date, across all its cards (last effort written wins; notes joined)
