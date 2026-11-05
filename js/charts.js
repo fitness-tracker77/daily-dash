@@ -18,6 +18,17 @@ function niceTicks(lo, hi) {
   return out;
 }
 
+// y-axis for a chart that must not exaggerate small changes: at least `minSpan` units tall, centred on the
+// data (and target path), ticks every `tickStep`. Everything in `vals` is always inside [lo, hi].
+export function axisFor(vals, { minSpan, tickStep }) {
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (hi - lo < minSpan) { const c = (lo + hi) / 2; lo = c - minSpan / 2; hi = c + minSpan / 2; }
+  else { const pad = (hi - lo) * 0.08; lo -= pad; hi += pad; }
+  const ticks = [];
+  for (let k = Math.ceil(lo / tickStep - 1e-9); k * tickStep <= hi + 1e-9; k++) ticks.push(+(k * tickStep).toFixed(6));
+  return { lo, hi, ticks };
+}
+
 function frame(height, ticks, y, dp) {
   let s = '';
   for (const t of ticks) {
@@ -28,7 +39,7 @@ function frame(height, ticks, y, dp) {
 }
 
 // points: [{date, y, mark?: 'pr' | 'above' | 'below' | 'on'}]; target: {from:{date,y}, to:{date,y}}; hLine: horizontal target
-export function lineChart({ points, target = null, hLine = null, x0 = null, x1 = null, highlight = 'last', unit = '', dp = 1, height = 170, label = 'Chart', tickDp = null }) {
+export function lineChart({ points, target = null, hLine = null, x0 = null, x1 = null, highlight = 'last', unit = '', dp = 1, height = 170, label = 'Chart', tickDp = null, minSpan = null, tickStep = null }) {
   const pts = points.filter((p) => isNum(p.y));
   if (!pts.length && !target) return '';
   const id = `g${++gid}`;
@@ -40,10 +51,13 @@ export function lineChart({ points, target = null, hLine = null, x0 = null, x1 =
   const vals = pts.map((p) => p.y);
   if (target) vals.push(target.from.y, target.to.y);
   if (isNum(hLine)) vals.push(hLine);
-  let lo = Math.min(...vals), hi = Math.max(...vals);
-  if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
-  const pad = (hi - lo) * 0.12; lo -= pad; hi += pad;
-  const ticks = niceTicks(lo, hi).filter((t) => t >= lo && t <= hi);
+  let lo = Math.min(...vals), hi = Math.max(...vals), ticks;
+  if (minSpan && tickStep) ({ lo, hi, ticks } = axisFor(vals, { minSpan, tickStep }));
+  else {
+    if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
+    const pad = (hi - lo) * 0.12; lo -= pad; hi += pad;
+    ticks = niceTicks(lo, hi).filter((t) => t >= lo && t <= hi);
+  }
   const y = (v) => B - (B - T) * ((v - lo) / (hi - lo));
   const hiIdx = !pts.length ? -1 : highlight === 'max' ? pts.reduce((bi, p, i) => (p.y > pts[bi].y ? i : bi), 0) : pts.length - 1;
   const fmt = (v) => fmtNum(v, dp);

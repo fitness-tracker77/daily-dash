@@ -32,7 +32,7 @@ export function renderLog(root, ctx) {
       <button class="btn btn--gold" type="submit">Save</button>
     </form>
     ${bw.length ? `<section class="chartblock" data-chart="bw-log">
-      ${lineChart({ points: bw.map((b) => ({ date: b.date, y: b.kg, mark: M.vsPath(b)?.side })), target, unit: 'kg', label: 'Bodyweight and target path' })}
+      ${lineChart({ points: bw.map((b) => ({ date: b.date, y: b.kg, mark: M.vsPath(b)?.side })), target, unit: 'kg', minSpan: 2, tickStep: 0.5, tickDp: 1, label: 'Bodyweight and target path' })}
       <p class="fine">${target ? 'Dashed: the straight target path from cycle.json. Filled dots above it, hollow below.' : 'No target path in cycle.json.'}</p></section>` : ''}
 
     <section class="entries" aria-label="Entries">
