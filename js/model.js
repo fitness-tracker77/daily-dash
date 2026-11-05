@@ -12,6 +12,14 @@ let C = null;
 export const setCycle = (c) => { C = c; memo.clear(); };
 export const cycle = () => C;
 
+
+// While the built-in example cycle is active nothing is written to storage (it would pollute real Insights later).
+// Bodyweight, settings and derived rollups are not example data and stay writable.
+const GUARDED = new Set(['meals', 'grams', 'pantry', 'pantryEvents', 'sets', 'exlog', 'runs', 'days']);
+const exampleActive = () => !!(C && C.isExample);
+function wput(coll, rec) { if (exampleActive() && GUARDED.has(coll)) return; store.put(coll, rec); }
+function wkv(key, value) { if (!exampleActive()) store.setKv(key, value); }
+
 // derived values are cached until the next change to logged data
 const memo = new Map();
 const cached = (k, fn) => { if (!memo.has(k)) memo.set(k, fn()); return memo.get(k); };
@@ -69,7 +77,7 @@ export function setTick(date, slot, on) {
       totalSnap(snap);
       snap.deducted = deductPantry(snap.items);
     }
-    store.put('meals', snap);
+    wput('meals', snap);
   }
   progress(date);
 }
@@ -85,7 +93,7 @@ export function setGrams(date, slot, idx, grams) {
   const cur = store.get('grams', key);
   const g = { ...(cur?.g || {}) };
   if (isNum(grams) && grams >= 0) g[idx] = grams; else delete g[idx];
-  if (Object.keys(g).length) store.put('grams', { key, date, slot: slotKey(slot), g });
+  if (Object.keys(g).length) wput('grams', { key, date, slot: slotKey(slot), g });
   else store.del('grams', key);
   if (tick(date, slot)) setTick(date, slot, true); // re-apply with the new grams
 }
@@ -103,9 +111,9 @@ export function editTickGrams(key, gramsByIdx) {
   }) };
   totalSnap(snap);
   snap.deducted = deductPantry(snap.items);
-  store.put('meals', snap);
+  wput('meals', snap);
   const g = {}; snap.items.forEach((it, i) => { if (isNum(it.eaten_g) && it.eaten_g !== it.planned_g) g[i] = it.eaten_g; });
-  if (Object.keys(g).length) store.put('grams', { key, date: rec.date, slot: rec.slot, g }); else store.del('grams', key);
+  if (Object.keys(g).length) wput('grams', { key, date: rec.date, slot: rec.slot, g }); else store.del('grams', key);
   progress(rec.date);
 }
 export function deleteTick(key) {
@@ -144,7 +152,7 @@ export function syncPantry() {
     const sig = lineSig(l);
     const cur = store.get('pantry', l.item_id);
     if (!cur || cur.baseSig !== sig) {
-      store.put('pantry', { key: l.item_id, quantity: l.quantity, source: l.source === 'counted' ? 'counted' : 'calculated', as_of: isValidDate(l.as_of) ? l.as_of : null, baseSig: sig });
+      wput('pantry', { key: l.item_id, quantity: l.quantity, source: l.source === 'counted' ? 'counted' : 'calculated', as_of: isValidDate(l.as_of) ? l.as_of : null, baseSig: sig });
     }
   }
 }
@@ -177,7 +185,7 @@ function deductPantry(items) {
     if (!line || !cur) continue;
     const amt = gramsToUnit(line, it.eaten_g);
     if (amt == null) continue;
-    store.put('pantry', { ...cur, quantity: round3(cur.quantity - amt), source: 'calculated', as_of: today() });
+    wput('pantry', { ...cur, quantity: round3(cur.quantity - amt), source: 'calculated', as_of: today() });
     out.push({ item_id: it.item_id, amount: amt, sig: cur.baseSig });
   }
   return out;
@@ -186,22 +194,22 @@ function reversePantry(snap) {
   for (const d of snap.deducted || []) {
     const cur = pantryState(d.item_id);
     if (!cur || cur.baseSig !== d.sig) continue; // a newer cycle.json count replaced this line
-    store.put('pantry', { ...cur, quantity: round3(cur.quantity + d.amount), source: 'calculated', as_of: today() });
+    wput('pantry', { ...cur, quantity: round3(cur.quantity + d.amount), source: 'calculated', as_of: today() });
   }
 }
 
 export function recount(id, qty) {
   const cur = pantryState(id); const line = pantryLine(id);
   if (!cur || !isNum(qty) || qty < 0) return false;
-  store.put('pantry', { ...cur, quantity: qty, source: 'counted', as_of: today() });
-  store.put('pantryEvents', { key: uid(), date: today(), ts: Date.now(), item_id: id, name: line?.name ?? id, kind: 'recount', amount: qty, unit: line?.unit ?? null, prev: cur.quantity, sig: cur.baseSig });
+  wput('pantry', { ...cur, quantity: qty, source: 'counted', as_of: today() });
+  wput('pantryEvents', { key: uid(), date: today(), ts: Date.now(), item_id: id, name: line?.name ?? id, kind: 'recount', amount: qty, unit: line?.unit ?? null, prev: cur.quantity, sig: cur.baseSig });
   return true;
 }
 export function bought(id, qty) {
   const cur = pantryState(id); const line = pantryLine(id);
   if (!cur || !isNum(qty) || qty <= 0) return false;
-  store.put('pantry', { ...cur, quantity: round3(cur.quantity + qty), source: 'calculated', as_of: today() });
-  store.put('pantryEvents', { key: uid(), date: today(), ts: Date.now(), item_id: id, name: line?.name ?? id, kind: 'bought', amount: qty, unit: line?.unit ?? null, sig: cur.baseSig });
+  wput('pantry', { ...cur, quantity: round3(cur.quantity + qty), source: 'calculated', as_of: today() });
+  wput('pantryEvents', { key: uid(), date: today(), ts: Date.now(), item_id: id, name: line?.name ?? id, kind: 'bought', amount: qty, unit: line?.unit ?? null, sig: cur.baseSig });
   return true;
 }
 // Deleting a purchase takes its amount back off. A recount cannot be undone (the old
@@ -211,7 +219,7 @@ export function deletePantryEvent(key) {
   if (!ev) return;
   if (ev.kind === 'bought') {
     const cur = pantryState(ev.item_id);
-    if (cur && (!ev.sig || cur.baseSig === ev.sig)) store.put('pantry', { ...cur, quantity: round3(cur.quantity - ev.amount), source: 'calculated', as_of: today() });
+    if (cur && (!ev.sig || cur.baseSig === ev.sig)) wput('pantry', { ...cur, quantity: round3(cur.quantity - ev.amount), source: 'calculated', as_of: today() });
   }
   store.del('pantryEvents', key);
 }
@@ -290,7 +298,7 @@ function baseSet(date, ex, i) {
 export function setDraft(date, ex, i, field, value) {
   const r = { ...baseSet(date, ex, i) };
   r[field] = isNum(value) && value >= 0 ? value : null;
-  store.put('sets', r);
+  wput('sets', r);
 }
 // tick/untick one set with the reps & kg shown in its boxes
 export function toggleSet(date, ex, i, typed = {}) {
@@ -304,13 +312,13 @@ export function toggleSet(date, ex, i, typed = {}) {
     r.name = ex.name;
     r.ts = Date.now();
   }
-  store.put('sets', r);
+  wput('sets', r);
   progress(date);
   return r.done;
 }
 export function editSet(key, { reps, load }) {
   const r = store.get('sets', key); if (!r) return;
-  store.put('sets', { ...r, reps: isNum(reps) && reps >= 0 ? reps : null, load: isNum(load) && load >= 0 ? load : null });
+  wput('sets', { ...r, reps: isNum(reps) && reps >= 0 ? reps : null, load: isNum(load) && load >= 0 ? load : null });
 }
 export function deleteSet(key) {
   const r = store.get('sets', key); if (!r) return;
@@ -322,7 +330,7 @@ export function backfillMuscles() {
   for (const r of store.values('sets')) {
     if (r.muscle) continue;
     const m = C.muscleOf.get(r.ex);
-    if (m) store.put('sets', { ...r, muscle: m });
+    if (m) wput('sets', { ...r, muscle: m });
   }
 }
 
@@ -389,7 +397,7 @@ export const exLog = (date, ex) => store.get('exlog', exlogKeyOf(date, ex));
 function writeExLog(key, cur, patch) {
   const next = { ...cur, ...patch, ts: Date.now() };
   if (!isNum(next.effort) && !String(next.note || '').trim()) store.del('exlog', key);
-  else store.put('exlog', next);
+  else wput('exlog', next);
 }
 export function setExLog(date, ex, patch) {
   const key = exlogKeyOf(date, ex);
@@ -422,7 +430,7 @@ export function migratePositionKeys() {
       idx = Math.max(-1, ...used) + 1; key = `${r.date}|@${pos}|${idx}`;
     }
     store.del('sets', r.key);
-    store.put('sets', { ...r, key, pos, idx });
+    wput('sets', { ...r, key, pos, idx });
     out.sets++;
   }
   for (const r of store.values('exlog')) {
@@ -433,7 +441,7 @@ export function migratePositionKeys() {
     const cur = store.get('exlog', key);
     const note = [cur?.note, r.note].map((n) => String(n || '').trim()).filter(Boolean).join(' · ');
     store.del('exlog', r.key);
-    store.put('exlog', cur ? { ...cur, effort: isNum(cur.effort) ? cur.effort : r.effort ?? null, note } : { ...r, key, pos });
+    wput('exlog', cur ? { ...cur, effort: isNum(cur.effort) ? cur.effort : r.effort ?? null, note } : { ...r, key, pos });
     out.exlog++;
   }
   return out;
@@ -506,13 +514,45 @@ export function exerciseDetail(key) {
   });
 }
 
+
+// ======================================================================
+// LEFTOVER EXAMPLE DATA
+// ======================================================================
+// Before a real cycle was imported the built-in example left records behind. Delete only records carrying an
+// example marker (item_id "ex_*", meal title "Example*", exercise id "example-*"), then rebuild the days rollup and
+// badges from what remains. Never touches bodyweight or anything unmarked. Safe to re-run (second run removes nothing).
+const isExItem = (id) => typeof id === 'string' && id.startsWith('ex_');
+const isExMeal = (m) => (Array.isArray(m.items) && m.items.some((i) => isExItem(i?.item_id))) || (typeof m.title === 'string' && m.title.startsWith('Example'));
+const isExEx = (r) => typeof r.ex === 'string' && r.ex.startsWith('example-');
+export function cleanExampleData() {
+  const out = { meals: [], sets: [], exlog: [], pantry: [], pantryEvents: [], days: [], daysRecomputed: 0, badgesRebuilt: false };
+  if (!C || C.isExample) return out;
+  const drop = (coll, test, list) => { for (const r of store.values(coll)) if (test(r)) { list.push(r.key); store.del(coll, r.key); } };
+  drop('meals', isExMeal, out.meals);
+  for (const k of out.meals) store.del('grams', k); // typed grams for a deleted example meal
+  drop('sets', isExEx, out.sets);
+  drop('exlog', isExEx, out.exlog);
+  drop('pantry', (r) => isExItem(r.key), out.pantry);
+  drop('pantryEvents', (r) => isExItem(r.item_id), out.pantryEvents);
+  const removed = out.meals.length + out.sets.length + out.exlog.length + out.pantry.length + out.pantryEvents.length;
+  if (!removed) return out;
+  const hasLogs = (d) => store.values('meals').some((r) => r.date === d) || store.values('sets').some((r) => r.date === d && r.done)
+    || store.values('exlog').some((r) => r.date === d) || store.values('runs').some((r) => r.date === d) || store.values('pantryEvents').some((r) => r.date === d);
+  for (const d of store.values('days')) {
+    if (C.day(d.key) || C.session(d.key)) { progress(d.key); out.daysRecomputed++; }
+    else if (!hasLogs(d.key)) { store.del('days', d.key); out.days.push(d.key); }
+  }
+  store.del('kv', 'badges'); updateBadges(); out.badgesRebuilt = true;
+  return out;
+}
+
 // ======================================================================
 // RUNS
 // ======================================================================
 const runKey = (date) => `${date}|run`;
 export const runRec = (date) => store.get('runs', runKey(date));
 export function saveRun(date, { distance_km, time_s, notes }) {
-  store.put('runs', { key: runKey(date), date, distance_km: isNum(distance_km) && distance_km > 0 ? distance_km : null, time_s: isNum(time_s) && time_s > 0 ? time_s : null, notes: String(notes || ''), ts: Date.now() });
+  wput('runs', { key: runKey(date), date, distance_km: isNum(distance_km) && distance_km > 0 ? distance_km : null, time_s: isNum(time_s) && time_s > 0 ? time_s : null, notes: String(notes || ''), ts: Date.now() });
   progress(date);
 }
 export function deleteRun(key) { const r = store.get('runs', key); if (!r) return; store.del('runs', key); progress(r.date); }
@@ -560,7 +600,7 @@ export function progress(date) {
     if (sp) { planned += sp.planned; done += sp.done; }
     const r = { planned, done, complete: planned > 0 && done >= planned };
     const cur = store.get('days', date);
-    if (date <= today() && (!cur || cur.planned !== r.planned || cur.done !== r.done || cur.complete !== r.complete)) store.put('days', { key: date, ...r });
+    if (date <= today() && (!cur || cur.planned !== r.planned || cur.done !== r.done || cur.complete !== r.complete)) wput('days', { key: date, ...r });
     return r;
   }
   const s = store.get('days', date);
@@ -862,7 +902,7 @@ export function updateBadges() {
   let cum = 0;
   for (const s of sets) { const v = volumeOf(s); if (v != null) { cum += v; if (cum >= 1000 && !b.kg1000) { b.kg1000 = s.date; break; } } }
   const ld = logDates(); if (ld.length >= 30 && !b.days30) b.days30 = ld[29];
-  if (JSON.stringify(b) !== before) store.setKv('badges', b);
+  if (JSON.stringify(b) !== before) wkv('badges', b);
   return BADGES.map((x) => ({ ...x, date: b[x.id] || null }));
 }
 
@@ -895,7 +935,7 @@ export function celebrateOnce(date, kind) {
   const d = { ...(c[date] || {}) };
   if (d[kind]) return false;
   d[kind] = true; c[date] = d;
-  store.setKv('celebrated', c);
+  wkv('celebrated', c);
   return true;
 }
 

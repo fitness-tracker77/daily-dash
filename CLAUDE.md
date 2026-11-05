@@ -8,6 +8,7 @@ Plain HTML/CSS/ES-module JS PWA (no build, no backend). Hosted on GitHub Pages. 
 - Browser check only for visual or interactive changes.
 - PRIVATE TEST DATA: `private/` (gitignored) holds the real backup and cycle. Never commit it, never print its contents. Check `git status` shows it unstaged.
 - Update this file whenever key formats or the file map change.
+- Example guard: while the built-in example cycle is active, `model.js` does not write meals/grams/sets/exlog/runs/pantry/pantryEvents/days/badges (`wput`/`wkv`). `cleanExampleData()` (run in `applyCycle`, so after import and restore) deletes leftover records marked `ex_*` / `Example*` / `example-*`, then rebuilds days and badges.
 - Missing input = `null` / "not logged", never a guessed number.
 
 ## File map

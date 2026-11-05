@@ -14,7 +14,7 @@ import { openSettings } from './views/settings.js';
 
 // The only place the in-app display title appears. Tab and home-screen label stay "Daily Dash".
 const APP_TITLE = 'Segovia OS';
-export const APP_VERSION = 'v6'; // keep in step with VERSION in sw.js
+export const APP_VERSION = 'v7'; // keep in step with VERSION in sw.js
 
 const VIEWS = { today: renderToday, train: renderTrain, fuel: renderFuel, insights: renderInsights, log: renderLog };
 const TABS = [['today', 'Today'], ['train', 'Train'], ['fuel', 'Fuel'], ['insights', 'Insights'], ['log', 'Log']];
@@ -39,6 +39,7 @@ const ctx = {
     ctx.warnings = validate(raw);
     M.setCycle(new Cycle(raw));
     M.migratePositionKeys();
+    M.cleanExampleData();
     M.syncPantry();
     M.backfillMuscles();
     M.refreshSnaps();
