@@ -1,0 +1,9 @@
+{
+  "name": "daily-dash",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"tests/*.test.js\"",
+    "test:file": "node --test"
+  }
+}
