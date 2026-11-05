@@ -61,7 +61,7 @@ export const tick = (date, slot) => store.get('meals', tickKey(date, slot));
 export function setTick(date, slot, on) {
   const key = tickKey(date, slot);
   const prev = store.get('meals', key);
-  if (prev) { reversePantry(prev); store.del('meals', key); }
+  if (prev) { reversePantry(prev); reverseYields(prev); store.del('meals', key); }
   if (on) {
     const snap = { key, date, slot: slotKey(slot), ts: Date.now(), type: slot.type, title: slot.title ?? null, time: slot.time ?? null, items: [], kcal: null, protein: null, partial: false, deducted: [] };
     if (slot.type === 'meal' && Array.isArray(slot.items)) {
@@ -77,6 +77,7 @@ export function setTick(date, slot, on) {
       totalSnap(snap);
       snap.deducted = deductPantry(snap.items);
     }
+    if (slot.type === 'cook') snap.yielded = addYields(slot);
     wput('meals', snap);
   }
   progress(date);
@@ -120,6 +121,7 @@ export function deleteTick(key) {
   const rec = store.get('meals', key);
   if (!rec) return;
   reversePantry(rec);
+  reverseYields(rec);
   store.del('meals', key);
   progress(rec.date);
 }
@@ -157,7 +159,13 @@ export function syncPantry() {
   }
 }
 export const pantryLine = (id) => C.pantry.find((l) => l.item_id === id) || null;
-export const pantryState = (id) => store.get('pantry', id);
+// While the example is active nothing is stored, so its pantry is read straight from the file.
+export function pantryState(id) {
+  const cur = store.get('pantry', id);
+  if (cur || !exampleActive()) return cur;
+  const l = pantryLine(id);
+  return l ? { key: id, quantity: l.quantity, source: l.source === 'counted' ? 'counted' : 'calculated', as_of: isValidDate(l.as_of) ? l.as_of : null, baseSig: lineSig(l) } : null;
+}
 
 // grams -> the line's unit; null when there is no honest conversion
 export function gramsToUnit(line, grams) {
@@ -190,6 +198,27 @@ function deductPantry(items) {
   }
   return out;
 }
+// A cook slot's "yields": [{item_id, quantity}] add what you cooked to that pantry line as a "cooked" event
+const yieldsOf = (slot) => (Array.isArray(slot?.yields) ? slot.yields.filter((y) => typeof y?.item_id === 'string' && isNum(y?.quantity) && y.quantity > 0) : []);
+function addYields(slot) {
+  const out = [];
+  for (const y of yieldsOf(slot)) {
+    const cur = pantryState(y.item_id); const line = pantryLine(y.item_id);
+    if (!cur || !line) continue;
+    const ek = uid();
+    wput('pantry', { ...cur, quantity: round3(cur.quantity + y.quantity), source: 'calculated', as_of: today() });
+    wput('pantryEvents', { key: ek, date: today(), ts: Date.now(), item_id: y.item_id, name: line.name ?? y.item_id, kind: 'cooked', amount: y.quantity, unit: line.unit ?? null, sig: cur.baseSig });
+    out.push({ item_id: y.item_id, amount: y.quantity, sig: cur.baseSig, event: ek });
+  }
+  return out;
+}
+function reverseYields(snap) {
+  for (const y of snap.yielded || []) {
+    const cur = pantryState(y.item_id);
+    if (cur && cur.baseSig === y.sig && store.get('pantryEvents', y.event)) wput('pantry', { ...cur, quantity: round3(cur.quantity - y.amount), source: 'calculated', as_of: today() });
+    store.del('pantryEvents', y.event);
+  }
+}
 function reversePantry(snap) {
   for (const d of snap.deducted || []) {
     const cur = pantryState(d.item_id);
@@ -217,7 +246,7 @@ export function bought(id, qty) {
 export function deletePantryEvent(key) {
   const ev = store.get('pantryEvents', key);
   if (!ev) return;
-  if (ev.kind === 'bought') {
+  if (ev.kind === 'bought' || ev.kind === 'cooked') {
     const cur = pantryState(ev.item_id);
     if (cur && (!ev.sig || cur.baseSig === ev.sig)) wput('pantry', { ...cur, quantity: round3(cur.quantity - ev.amount), source: 'calculated', as_of: today() });
   }
@@ -225,60 +254,85 @@ export function deletePantryEvent(key) {
 }
 export const pantryEvents = (id) => store.values('pantryEvents').filter((e) => !id || e.item_id === id).sort((a, b) => b.ts - a.ts);
 
-// planned grams per item from today (unticked meals only) to the end of the cycle
+// planned grams per item from today (unticked meals only) to the end of the cycle, with when each is used,
+// plus planned yields (unticked cook slots) that will add to stock
 export function remainingPlan() {
   return cached('remainingPlan', () => {
     const t = today();
     const end = C.end || C.dates[C.dates.length - 1] || null;
     const days = end && end >= t ? dateRange(t, end) : [];
-    const need = new Map(); const untracked = new Set();
+    const need = new Map(); const untracked = new Set(); const yields = new Map();
     for (const date of days) {
-      for (const slot of C.mealSlots(date)) {
-        if (date === t && tick(date, slot)) continue; // already eaten and subtracted
+      for (const slot of C.slots(date)) {
+        if (date === t && tick(date, slot)) continue; // already eaten/cooked and applied to the pantry
+        if (slot.type === 'cook') {
+          for (const y of yieldsOf(slot)) { if (!yields.has(y.item_id)) yields.set(y.item_id, []); yields.get(y.item_id).push({ date, time: slot.time ?? '', qty: y.quantity }); }
+          continue;
+        }
+        if (slot.type !== 'meal') continue;
         (slot.items || []).forEach((it) => {
           if (!isNum(it?.grams)) return;
           if (!it.item_id) { untracked.add(it.name); return; }
-          const n = need.get(it.item_id) || { name: it.name, grams: 0 };
-          n.grams += it.grams; need.set(it.item_id, n);
+          const n = need.get(it.item_id) || { name: it.name, grams: 0, uses: [], firstDate: date };
+          n.grams += it.grams; n.uses.push({ date, time: slot.time ?? '', grams: it.grams });
+          if (date < n.firstDate) n.firstDate = date;
+          need.set(it.item_id, n);
         });
       }
     }
-    return { from: t, to: end, days: days.length, need, untracked: [...untracked] };
+    return { from: t, to: end, days: days.length, need, untracked: [...untracked], yields };
   });
 }
 
 // Each pantry line: what you have now against what the rest of the cycle's plan needs (same unit)
+const isPieces = (u) => /^(pcs?|pieces?|units?)$/i.test(String(u).trim());
 export function pantryBoard() {
   return cached('pantryBoard', () => {
     const plan = remainingPlan();
     return C.pantry.map((line) => {
       const st = pantryState(line.item_id);
-      const row = { id: line.item_id, name: line.name ?? line.item_id, unit: line.unit, quantity: st?.quantity ?? null, source: st?.source ?? null, as_of: st?.as_of ?? null, line };
+      const q = st?.quantity ?? null;
+      const row = { id: line.item_id, name: line.name ?? line.item_id, unit: line.unit, quantity: isNum(q) ? Math.max(0, q) : null, negative: isNum(q) && q < 0, source: st?.source ?? null, as_of: st?.as_of ?? null, line };
       const planned = plan.need.get(line.item_id)?.grams || 0;
       row.plannedG = planned; row.remainingDays = plan.days;
-      if (!planned || !plan.days) { row.noUse = true; return row; }
+      if (!planned || !plan.days) { row.noUse = true; if (row.negative) row.overBy = -q; return row; }
       const need = gramsToUnit(line, planned);
-      if (need == null) { row.noConversion = true; return row; }
+      if (need == null) { row.noConversion = true; row.pieces = isPieces(line.unit); return row; }
       row.need = need;
       row.short = isNum(row.quantity) && row.quantity < need - 1e-9;
+      if (row.negative) row.overBy = need; // stock is 0, so all the planned use is beyond it
       return row;
     });
   });
 }
 
+// What to buy: planned use minus stock, where planned yields (a batch you will cook) count as stock for uses
+// that come after them. Sorted by the first date each item is needed. Items with no pantry line are listed
+// separately (notTracked), never as something to buy.
 export function shoppingList() {
   return cached('shopping', () => {
     const plan = remainingPlan();
-    const rows = [];
+    const rows = []; const notTracked = [];
     for (const [id, n] of plan.need) {
       const line = pantryLine(id); const cur = pantryState(id);
-      if (!line || !cur) { rows.push({ id, name: n.name, grams: n.grams, notInPantry: true }); continue; }
+      if (!line || !cur) { notTracked.push({ id, name: n.name, grams: n.grams, neededBy: n.firstDate }); continue; }
       const needUnits = gramsToUnit(line, n.grams);
-      if (needUnits == null) { rows.push({ id, name: line.name, grams: n.grams, unit: line.unit, noConversion: true, basis: cur.source, as_of: cur.as_of }); continue; }
-      const deficit = needUnits - cur.quantity;
-      if (deficit > 1e-9) rows.push({ id, name: line.name, need: needUnits, have: cur.quantity, deficit, unit: line.unit, basis: cur.source, as_of: cur.as_of });
+      if (needUnits == null) { rows.push({ id, name: line.name, grams: n.grams, unit: line.unit, noConversion: true, pieces: isPieces(line.unit), basis: cur.source, as_of: cur.as_of, neededBy: n.firstDate }); continue; }
+      // walk forward in time: yields add, uses subtract; the lowest point is what must be bought
+      const evs = [];
+      for (const u of n.uses) evs.push({ at: `${u.date} ${u.time}`, d: -gramsToUnit(line, u.grams), use: 1 });
+      for (const y of plan.yields.get(id) || []) evs.push({ at: `${y.date} ${y.time}`, d: y.qty, use: 0 });
+      evs.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : b.use - a.use)); // same moment: the yield lands first
+      const have = Math.max(0, cur.quantity);
+      let run = have, low = have;
+      for (const e of evs) { run += e.d; low = Math.min(low, run); }
+      const deficit = Math.max(0, -low);
+      const yielded = sum((plan.yields.get(id) || []).map((y) => y.qty));
+      if (deficit > 1e-9) rows.push({ id, name: line.name, need: needUnits, have, yielded, deficit: round3(deficit), unit: line.unit, basis: cur.source, as_of: cur.as_of, neededBy: n.firstDate });
     }
-    return { rows, untracked: plan.untracked, days: plan.days, from: plan.from, to: plan.to };
+    const byDate = (a, b) => (a.neededBy < b.neededBy ? -1 : a.neededBy > b.neededBy ? 1 : String(a.name).localeCompare(String(b.name)));
+    rows.sort(byDate); notTracked.sort(byDate);
+    return { rows, notTracked, untracked: plan.untracked, days: plan.days, from: plan.from, to: plan.to };
   });
 }
 

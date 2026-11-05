@@ -91,7 +91,7 @@ function entriesHTML(date) {
   }
   for (const pe of e.pantry) {
     parts.push(`<li class="row entry" data-entry="pantry" data-key="${esc(pe.key)}">
-      <div><p class="entry__k">Pantry</p><p class="entry__t">${esc(pe.name)} ${pe.kind === 'bought' ? 'bought' : 'recounted to'} ${fmtKg(pe.amount)} ${esc(pe.unit ?? '')}</p></div>
+      <div><p class="entry__k">Pantry</p><p class="entry__t">${esc(pe.name)} ${pe.kind === 'bought' ? 'bought' : pe.kind === 'cooked' ? 'cooked' : 'recounted to'} ${fmtKg(pe.amount)} ${esc(pe.unit ?? '')}</p></div>
       <div class="entry__acts"><button class="link link--quiet" data-del>Delete</button></div></li>`);
   }
   return parts.length ? `<ul class="rows">${parts.join('')}</ul>` : '<p class="quiet">Nothing logged on this date.</p>';

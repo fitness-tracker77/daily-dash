@@ -32,7 +32,7 @@ Plain HTML/CSS/ES-module JS PWA (no build, no backend). Hosted on GitHub Pages. 
 - `exlog` `${date}|@${pos}`: `{date, pos, ex, name, effort, note}`. History/PRs/volume group by the `ex` id, never by key; use `exLogFor(date, id)` to merge cards.
 - `runs` `${date}|run`. `bodyweight` `${date}` `{kg, ts}`.
 - `pantry` `${item_id}`: `{quantity, source: counted|calculated, as_of, baseSig}`.
-- `pantryEvents` random `uid()`: `{date, ts, item_id, kind: recount|bought, amount, unit}`.
+- `pantryEvents` random `uid()`: `{date, ts, item_id, kind: recount|bought|cooked, amount, unit}` (cooked = cook-slot `yields`; the tick snapshot keeps `yielded` so untick reverses it).
 - `days` `${date}`: `{planned, done, complete}` snapshot (keeps streaks across cycles).
 - `kv` name: `badges, celebrated, settings` (history) and device-only `cycleImport, migration, lastBackup, rollupsVersion` (not in backups).
 - `rollups` `d:|w:|m:` + date: derived, rebuilt from raw logs (`ROLLUP_VERSION` 2: `volume`, `muscle` kg per group, `muscleSets` sets per group).

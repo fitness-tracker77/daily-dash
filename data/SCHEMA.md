@@ -74,6 +74,7 @@ The bodyweight path is a straight line from `bodyweight_start_kg` on `start_date
 | `recipe_id` | no | string | Key into `recipes`. On a `cook` slot it adds Cook mode. On any slot the long-press detail lists the steps. |
 | `notes` | no | string | Extra text on the row and in the detail. |
 | `items` | meal: yes | array | Planned portions (below). |
+| `yields` | no | array | Cook slots only: `[{"item_id": "quesadillas", "quantity": 8}]`. What the batch adds to the pantry, in that pantry line's own unit. Ticking the slot adds `quantity` to the line as a "cooked" pantry event; unticking reverses it. Until ticked, the shopping list counts a planned yield as stock for every use of that item after the cook slot's date and time, so a batch you will cook is never listed as something to buy. |
 
 Slot types:
 

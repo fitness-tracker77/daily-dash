@@ -40,15 +40,20 @@ export function renderFuel(root, ctx) {
       <h2 class="h2">Shopping list</h2>
       <p class="sub">${shop.days ? `Planned use from today to ${fmtDate(shop.to)} minus what you have. Shortfalls only.` : 'The cycle has ended.'}</p>
       ${shop.rows.length ? `<ul class="rows shop">${shop.rows.map(shopRow).join('')}</ul>` : `<p class="quiet">${shop.days ? 'Nothing is short for the rest of the cycle.' : ''}</p>`}
+      ${shop.notTracked.length ? `<details class="fine"><summary>Not tracked in the pantry (${shop.notTracked.length})</summary>
+        <ul class="rows shop">${shop.notTracked.map((r) => `<li class="row shop__row"><span>${esc(r.name)}</span><span class="shop__amt">${fmtKg(r.grams)} g planned</span><span class="shop__basis">needed by ${fmtDate(r.neededBy)}</span></li>`).join('')}</ul></details>` : ''}
       ${shop.untracked.length ? `<p class="fine">Not tracked (no item_id): ${shop.untracked.map(esc).join(', ')}.</p>` : ''}
     </section>`;
   bind(root, ctx);
 }
 
+const noConv = (r) => (r.pieces ? 'Planned in grams, stocked in pieces: not compared' : `${esc(r.unit)} needs grams_per_unit to compare`);
+const overTxt = (r) => (isNum(r.need) ? `planned use is ${fmtKg(r.need)} ${esc(r.unit)} more than stock — recount` : `${fmtKg(r.overBy)} ${esc(r.unit)} used beyond stock — recount`);
+
 function boardRow(r) {
   const open = recounting.has(r.id);
   const needTxt = r.noUse ? 'no planned use for the rest of the cycle'
-    : r.noConversion ? `${esc(r.unit)} needs grams_per_unit to compare`
+    : r.noConversion ? noConv(r)
       : `needs ${fmtKg(r.need)} ${esc(r.unit)} for the rest of the cycle`;
   return `
     <li class="row board__row${r.short ? ' is-short' : ''}" data-item="${esc(r.id)}">
@@ -56,7 +61,8 @@ function boardRow(r) {
         <span class="board__name">${esc(r.name)}</span>
         <span class="board__qty"><strong>${qty(r)}</strong><span class="board__src">, ${label(r.source, r.as_of)}</span></span>
         ${haveNeed(r.quantity, r.need)}
-        <span class="board__need${r.short ? ' is-warm' : ''}">${needTxt}</span>
+        <span class="board__need${r.short || r.negative ? ' is-warm' : ''}">${needTxt}</span>
+        ${r.negative ? `<span class="board__need is-warm">${overTxt(r)}</span>` : ''}
       </div>
       <div class="board__side">${open ? '' : `<button class="link" data-recount="${esc(r.id)}">Recount</button>`}</div>
       ${open ? `<form class="inline-form" data-recount-form="${esc(r.id)}">
@@ -67,11 +73,12 @@ function boardRow(r) {
 }
 
 function shopRow(r) {
-  if (r.notInPantry) return `<li class="row shop__row"><span>${esc(r.name)}</span><span class="shop__amt">${fmtKg(r.grams)} g planned</span><span class="shop__basis">not in pantry list</span></li>`;
-  if (r.noConversion) return `<li class="row shop__row"><span>${esc(r.name)}</span><span class="shop__amt">${fmtKg(r.grams)} g planned</span><span class="shop__basis">${esc(r.unit)} needs grams_per_unit to compare</span></li>`;
+  const by = `<span class="shop__basis">needed by ${fmtDate(r.neededBy)}</span>`;
+  if (r.noConversion) return `<li class="row shop__row"><span>${esc(r.name)}</span><span class="shop__amt">${fmtKg(r.grams)} g planned</span><span class="shop__basis">${noConv(r)}</span>${by}</li>`;
   return `<li class="row shop__row" data-shop="${esc(r.id)}"><span>${esc(r.name)}</span><span class="shop__amt">${fmtKg(r.deficit)} ${esc(r.unit)}</span>
     ${haveNeed(r.have, r.need)}
-    <span class="shop__basis">based on ${esc(r.basis)}${r.as_of ? ` ${fmtDate(r.as_of)}` : ''}: need ${fmtKg(r.need)}, have ${fmtKg(r.have)}</span></li>`;
+    ${by}
+    <span class="shop__basis">based on ${esc(r.basis)}${r.as_of ? ` ${fmtDate(r.as_of)}` : ''}: need ${fmtKg(r.need)}, have ${fmtKg(r.have)}${r.yielded ? `, plus ${fmtKg(r.yielded)} you will cook` : ''}</span></li>`;
 }
 
 function bind(root, ctx) {
@@ -115,7 +122,7 @@ function itemSheet(ctx, id) {
       <button class="btn btn--gold btn--sm" type="submit">Add bought</button>
     </form>
     <p class="fine">Bought adds to the current amount and labels it calculated. Recount replaces it with a measured number.</p>
-    ${ev.length ? `<h3 class="h3">History</h3><ul class="list">${ev.map((e) => `<li><span>${fmtDate(e.date)} ${e.kind === 'bought' ? 'bought' : 'recounted to'}</span><span>${fmtKg(e.amount)} ${esc(e.unit ?? '')}</span></li>`).join('')}</ul>` : ''}`;
+    ${ev.length ? `<h3 class="h3">History</h3><ul class="list">${ev.map((e) => `<li><span>${fmtDate(e.date)} ${e.kind === 'bought' ? 'bought' : e.kind === 'cooked' ? 'cooked' : 'recounted to'}</span><span>${fmtKg(e.amount)} ${esc(e.unit ?? '')}</span></li>`).join('')}</ul>` : ''}`;
   const body = openSheet(html, { title: r.name });
   body.querySelector('[data-bought]').addEventListener('submit', (e) => {
     e.preventDefault();
