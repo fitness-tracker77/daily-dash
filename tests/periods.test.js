@@ -91,3 +91,28 @@ test('private: First 1,000 kg lifted is 2026-09-24 and 10 sessions counts runs',
   const again = Object.fromEntries(M.updateBadges().map((x) => [x.id, x.date]));
   assert.deepEqual(again, b, 'stable on recompute');
 });
+
+test('Load/1RM and Bodyweight cards use a fixed last-12-weeks window; the picker starts on the most recent exercise', () => {
+  assert.deepEqual(M.last12Weeks('2026-11-05'), { from: '2026-08-14', to: '2026-11-05' });
+  assert.equal(M.bodyweightView('12w', '2026-11-05').x0, '2026-08-14');
+  reset(); useCycle(cyc());
+  set('2026-10-01', 'squat', 0, 100); set('2026-10-20', 'bench', 0, 60); set('2026-10-10', 'row', 0, 40);
+  assert.deepEqual(M.exercisesLogged().map((e) => e.ex), ['bench', 'row', 'squat']);
+});
+
+test('Plan followed y-axis tops out at 100%', async () => {
+  const { barChart } = await import('../js/charts.js');
+  const svg = barChart({ bars: [{ key: 'a', label: 'a', stack: [{ v: 40 }] }, { key: 'b', label: 'b', stack: [{ v: 100 }] }], yMax: 100 });
+  const ticks = [...svg.matchAll(/class="chart__tick" x="28"[^>]*>([\d,]+)</g)].map((m) => Number(m[1]));
+  assert.equal(Math.max(...ticks), 100);
+  const low = barChart({ bars: [{ key: 'a', label: 'a', stack: [{ v: 12 }] }], yMax: 100 });
+  assert.equal(Math.max(...[...low.matchAll(/class="chart__tick" x="28"[^>]*>([\d,]+)</g)].map((m) => Number(m[1]))), 100, 'not squeezed to the data');
+});
+
+test('picker order: the exercise ticked last on the latest day comes first', () => {
+  reset(); useCycle(cyc());
+  store.put('sets', { key: '2026-11-04|a|0', date: '2026-11-04', ex: 'a', name: 'A', idx: 0, done: true, reps: 5, load: 10, ts: 100 });
+  store.put('sets', { key: '2026-11-04|a|1', date: '2026-11-04', ex: 'a', name: 'A', idx: 1, done: true, reps: 5, load: 10, ts: 101 });
+  store.put('sets', { key: '2026-11-04|b|0', date: '2026-11-04', ex: 'b', name: 'B', idx: 0, done: true, reps: 5, load: 10, ts: 200 });
+  assert.equal(M.exercisesLogged()[0].ex, 'b');
+});

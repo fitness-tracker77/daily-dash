@@ -119,7 +119,7 @@ function adherenceBlock(from, to) {
 
 // ---------------------------------------------------------------- load and estimated 1RM for one exercise
 function exerciseBlock() {
-  const to = today(), from = addDays(to, -83); // always the last 12 weeks, whatever period is selected
+  const { from, to } = M.last12Weeks(); // always the last 12 weeks, whatever period is selected
   const list = M.exercisesLogged();
   if (!list.length) return `<section class="chartblock" data-chart="exercise"><h2 class="h2">Load and estimated 1RM <small>last 12 weeks</small></h2><p class="quiet">${NL}: no sets ticked yet.</p></section>`;
   if (!ui.ex || !list.some((e) => e.ex === ui.ex)) ui.ex = list[0].ex;

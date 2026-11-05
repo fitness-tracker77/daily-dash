@@ -32,8 +32,8 @@ test('adds weigh-ins, runs and sets; exercise id is the lowercase name; load nul
 test('history feeds prefill and PRs', () => {
   reset(); useCycle(cyc());
   run(file());
-  const pf = M.prefill('2026-11-02', { id: 'leg-curl', name: 'Leg Curl', pos: 0 }, 0);
-  assert.deepEqual([pf.load, pf.from], [32.5, 'history']);
+  const pf = M.prefill('2026-11-02', { id: 'leg-curl', name: 'Leg Curl', pos: 0, reps: 8 }, 0);
+  assert.deepEqual([pf.load, pf.reps, pf.from], [30, 8, 'history']); // same set number of the last session; reps from the plan
   // PR: a later heavier set beats the imported best
   store.put('sets', { key: '2026-10-01|leg-curl|0', date: '2026-10-01', ex: 'leg-curl', name: 'Leg Curl', idx: 0, done: true, reps: 5, load: 40, ts: 1 });
   assert.equal(M.prs().hits.length, 1);

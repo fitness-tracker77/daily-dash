@@ -61,13 +61,13 @@ test('volume, set counts and weight lifted count each set once across duplicate 
   assert.equal(M.sessionProgress(D).done, 3);
 });
 
-test('prefill: card 2 takes the last set ticked on card 1', () => {
+test('prefill: a null-load card 2 takes the same set number from card 1; reps come from the plan', () => {
   reset(); useCycle(cycleRaw());
   const [a, , b] = cards();
   M.toggleSet(D, a, 0, { reps: 8, load: 30 });
   M.toggleSet(D, a, 1, { reps: 6, load: 32.5 });
   const pf = M.prefill(D, b, 0);
-  assert.deepEqual([pf.reps, pf.load, pf.from], [6, 32.5, 'history']);
+  assert.deepEqual([pf.reps, pf.load, pf.from], [8, 30, 'history']);
 });
 
 const oldSet = (date, ex, i, extra = {}) => ({ key: `${date}|${ex}|${i}`, date, ex, name: ex, muscle: 'hamstrings', idx: i, done: true, reps: 8, load: 30, ts: 1000 + i, ...extra });

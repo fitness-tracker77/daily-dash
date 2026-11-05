@@ -436,16 +436,34 @@ export function lastLogged(date, ex) {
   for (let i = list.length - 1; i >= 0; i--) if (list[i].date < date) return list[i];
   return null;
 }
-// reps/kg boxes: your most recent logged set of that exercise (earlier today included), else the plan
-export function prefill(date, ex, i) {
-  const key = setKeyOf(date, ex, i);
-  const list = setsByEx().get(exKey(ex)) || [];
-  for (let k = list.length - 1; k >= 0; k--) {
-    const s = list[k];
-    if (s.key === key || s.date > date) continue;
-    return { reps: s.reps ?? (isNum(ex.reps) ? ex.reps : null), load: s.load, from: 'history' };
+// The most recent session of an exercise (all its cards that day): { date, sets } oldest set first. With
+// `sameDay` the current date counts too (an earlier card of the same exercise), never the set `exceptKey` itself.
+export function lastSession(date, ex, { sameDay = false, exceptKey = null } = {}) {
+  const list = (setsByEx().get(exKey(ex)) || []).filter((x) => (sameDay ? x.date <= date : x.date < date) && x.key !== exceptKey);
+  if (!list.length) return null;
+  const d = list[list.length - 1].date;
+  return { date: d, sets: list.filter((x) => x.date === d) };
+}
+// "49 kg × 10, 10, 10, 10" / "bodyweight × 6, 6": consecutive sets at the same load share one kg; bodyweight for null loads
+export function setsText(sets) {
+  const parts = [];
+  for (const x of sets) {
+    const lab = x.load != null ? `${fmtKg(x.load)} kg` : 'bodyweight';
+    const r = x.reps ?? '?';
+    const last = parts[parts.length - 1];
+    if (last && last.lab === lab) last.reps.push(r); else parts.push({ lab, reps: [r] });
   }
-  return { reps: isNum(ex.reps) ? ex.reps : null, load: isNum(ex.load_kg) ? ex.load_kg : null, from: 'plan' };
+  return parts.map((p) => `${p.lab} × ${p.reps.join(', ')}`).join('; ');
+}
+// Boxes: reps always from the plan. kg from the plan when it gives a load (it carries the progression); when the plan
+// load is null, kg from the SAME set number of the last session (else its last set); bodyweight stays blank.
+export function prefill(date, ex, i) {
+  const reps = isNum(ex.reps) ? ex.reps : null;
+  if (isNum(ex.load_kg)) return { reps, load: ex.load_kg, from: 'plan' };
+  const ls = lastSession(date, ex, { sameDay: true, exceptKey: setKeyOf(date, ex, i) });
+  if (!ls) return { reps, load: null, from: 'none' };
+  const same = ls.sets.find((x) => x.idx === i) || ls.sets[ls.sets.length - 1];
+  return { reps, load: isNum(same.load) ? same.load : null, from: 'history' };
 }
 
 // effort (1-10) and a note per exercise per date
@@ -579,8 +597,9 @@ export function funLine(kg, date = today(), offset = 0) {
 export function exercisesLogged() {
   return cached('exList', () => {
     const m = new Map();
-    for (const s of loggedSets()) { const e = m.get(s.ex) || { ex: s.ex, name: s.name, sets: 0, last: s.date }; e.sets++; e.last = s.date; e.name = s.name; m.set(s.ex, e); }
-    return [...m.values()].sort((a, b) => (a.last < b.last ? 1 : a.last > b.last ? -1 : b.sets - a.sets));
+    for (const s of loggedSets()) { const e = m.get(s.ex) || { ex: s.ex, name: s.name, sets: 0, last: s.date, lastTs: 0 }; e.sets++; e.last = s.date; e.lastTs = s.ts || 0; e.name = s.name; m.set(s.ex, e); }
+    // most recently logged first: by date, then by the last set ticked that day
+    return [...m.values()].sort((a, b) => (a.last < b.last ? 1 : a.last > b.last ? -1 : b.lastTs - a.lastTs || b.sets - a.sets));
   });
 }
 
@@ -902,6 +921,8 @@ export const rollup = (key) => rollups().get(key) || null;
 // ======================================================================
 // INSIGHTS
 // ======================================================================
+// the fixed window of the Load/1RM and Bodyweight cards: the last 12 weeks, whatever period is selected
+export const last12Weeks = (now = today()) => ({ from: addDays(now, -83), to: now });
 export const PERIODS = ['Week', 'Month', 'Year', 'All'];
 // Calendar periods: Week = Monday-Sunday, Month = the calendar month, Year = the calendar year, All = first logged day to today.
 // canPrev: there is logged data before this period; canNext: this period ends before today. prev/next are anchors.
@@ -1309,7 +1330,7 @@ export function exportText(id = '7d') {
     const ent = entriesFor(d);
     for (const x of ent.exercises) {
       const xl = exLogFor(d, x.ex);
-      nl(`  ${x.name}: ${x.sets.map((s) => `${s.reps ?? '?'} x ${s.load != null ? fmtKg(s.load) + ' kg' : 'no load'}${prIds.has(s.key) ? ' (PR)' : ''}`).join(', ')}${isNum(xl?.effort) ? `; effort ${xl.effort}/10` : ''}${xl?.note ? `; note: ${xl.note}` : ''}`);
+      nl(`  ${x.name}: ${x.sets.map((s) => `${s.reps ?? '?'} x ${s.load != null ? fmtKg(s.load) + ' kg' : 'bodyweight'}${prIds.has(s.key) ? ' (PR)' : ''}`).join(', ')}${isNum(xl?.effort) ? `; effort ${xl.effort}/10` : ''}${xl?.note ? `; note: ${xl.note}` : ''}`);
     }
     for (const xl of ent.exlogs) if (!ent.exercises.some((x) => x.ex === xl.ex)) nl(`  ${xl.name}: no sets ticked${isNum(xl.effort) ? `; effort ${xl.effort}/10` : ''}${xl.note ? `; note: ${xl.note}` : ''}`);
     const vol = rollup(`d:${d}`);

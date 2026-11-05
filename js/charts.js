@@ -51,7 +51,7 @@ export function tickDpFor(ticks) {
   return dp;
 }
 // weekly x-axis dates: one label every 7 days from the start, at most `max` (stride in whole weeks)
-export function weeklyLabels(d0, d1, max = 6) {
+export function weeklyLabels(d0, d1, max = 5) {
   const span = daysBetween(d0, d1);
   if (span < 7) return span > 0 ? [d0, d1] : [d0];
   const weeks = Math.floor(span / 7) + 1;

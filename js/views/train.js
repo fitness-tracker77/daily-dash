@@ -54,7 +54,7 @@ function weekDots() {
 
 function exerciseBlock(date, ex, xi) {
   const prIds = M.prs().ids;
-  const last = M.lastLogged(date, ex);
+  const last = M.lastSession(date, ex);
   const xl = M.exLog(date, ex);
   const restS = ex.rest ?? M.settings().restDefault;
   let fromHistory = false;
@@ -77,11 +77,11 @@ function exerciseBlock(date, ex, xi) {
   return `
     <li class="ex" data-ex="${xi}">
       <button class="ex__name" data-detail="${esc(exKey(ex))}">${esc(ex.name)}</button>
-      <p class="ex__plan">${ex.sets} × ${isNum(ex.reps) ? ex.reps : '?'}${isNum(ex.load_kg) ? ` at ${fmtKg(ex.load_kg)} kg` : ', no load'}, rest ${fmtClock(restS)}${ex.muscle ? `, ${esc(ex.muscle)}` : ''}</p>
-      ${last ? `<div class="ex__lastrow"><p class="ex__last">last: ${last.load != null ? `${fmtKg(last.load)} kg` : 'no load'} × ${last.reps ?? '?'}<small>, ${fmtDate(last.date)}</small></p>${sparkline(M.recentLoads(ex), { label: `Heaviest set, last sessions of ${ex.name}` })}</div>` : ''}
+      <p class="ex__plan">${ex.sets} × ${isNum(ex.reps) ? ex.reps : '?'}${isNum(ex.load_kg) ? ` at ${fmtKg(ex.load_kg)} kg` : ', no planned kg'}, rest ${fmtClock(restS)}${ex.muscle ? `, ${esc(ex.muscle)}` : ''}</p>
+      ${last ? `<div class="ex__lastrow"><p class="ex__last">last: ${esc(M.setsText(last.sets))}<small> · ${fmtDate(last.date)}</small></p>${sparkline(M.recentLoads(ex), { label: `Heaviest set, last sessions of ${ex.name}` })}</div>` : ''}
       ${ex.notes ? `<p class="ex__notes">${esc(ex.notes)}</p>` : ''}
       <ol class="sets">${sets}</ol>
-      <p class="fine">${fromHistory ? 'Boxes are prefilled from your last logged set.' : 'Boxes are prefilled from the plan.'}</p>
+      ${Array.from({ length: ex.sets }, (_, i) => M.setRec(date, ex, i)?.done).every(Boolean) ? '' : `<p class="fine">${isNum(ex.load_kg) ? 'Boxes: kg from the plan · reps from the plan' : fromHistory ? 'Boxes: kg from your last session · reps from the plan' : 'Boxes: reps from the plan · kg blank (bodyweight or none yet)'}</p>`}
       <div class="effort" role="group" aria-label="Effort for ${esc(ex.name)}">
         <span class="effort__label">Effort</span>
         ${Array.from({ length: 10 }, (_, k) => `<button class="effort__b${xl?.effort === k + 1 ? ' is-on' : ''}" data-effort="${xi}:${k + 1}" aria-pressed="${xl?.effort === k + 1}">${k + 1}</button>`).join('')}

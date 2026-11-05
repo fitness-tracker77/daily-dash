@@ -64,7 +64,7 @@ function entriesHTML(date) {
   for (const x of e.exercises) {
     for (const s of x.sets) {
       parts.push(`<li class="row entry" data-entry="set" data-key="${esc(s.key)}">
-        <div><p class="entry__k">${esc(x.name)}, set ${s.idx + 1}</p><p class="entry__t">${s.reps ?? '?'} × ${s.load != null ? `${fmtKg(s.load)} kg` : 'no load'}${M.prs().ids.has(s.key) ? ' <span class="pr">PR</span>' : ''}</p></div>
+        <div><p class="entry__k">${esc(x.name)}, set ${s.idx + 1}</p><p class="entry__t">${s.reps ?? '?'} × ${s.load != null ? `${fmtKg(s.load)} kg` : 'bodyweight'}${M.prs().ids.has(s.key) ? ' <span class="pr">PR</span>' : ''}</p></div>
         <div class="entry__acts"><button class="link" data-edit>Edit</button><button class="link link--quiet" data-del>Delete</button></div></li>`);
     }
   }
