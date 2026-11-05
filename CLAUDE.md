@@ -17,6 +17,7 @@ Plain HTML/CSS/ES-module JS PWA (no build, no backend). Hosted on GitHub Pages. 
 - `js/store.js` IndexedDB + in-memory maps. Exports `init, all, values, get, put, del, kv, setKv, delKv, replaceAll, flush, onChange, revision, COLLS, LOG_COLLS, DEVICE_KV, convertLegacy, saveImported, readImported, clearImported`.
 - `js/data.js` cycle loading/validation. Exports `loadCycle, checkImport, validate, Cycle, slotKey, exKey, SLOT_TYPES`.
 - `js/model.js` all computation (ticks, pantry, sets, PRs, progress, rollups, insights data, badges, export text). Exports listed by `grep ^export js/model.js`.
+- `js/history.js` Settings > Import history: `checkHistory` (validate, warnings by field) and `importHistory` (never overwrites; lift sets become history-only `date|exId|idx` records with no `pos`, weigh-ins/runs use their normal keys).
 - `js/backup.js` backup build/check/apply (`buildBackup, checkBackup, applyBackup, countsOf`).
 - `js/util.js` dates, number formatting, `esc`, `uid`, `slug`, audio/haptics.
 - `js/ui.js` sheets, toast, confetti, rings, `ICON`. `js/charts.js` SVG `lineChart, barChart, donut, sparkline, progressBar, haveNeed`.

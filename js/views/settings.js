@@ -2,6 +2,7 @@
 import { checkImport } from '../data.js';
 import * as store from '../store.js';
 import * as M from '../model.js';
+import { checkHistory, importHistory } from '../history.js';
 import { checkBackup, applyBackup, saveBackupFile } from '../backup.js';
 import { openSheet, closeSheet, toast, ICON } from '../ui.js';
 import { esc, haptic, num, fmtDate, daysAgoText } from '../util.js';
@@ -32,6 +33,17 @@ export function openSettings(ctx) {
       <div data-result aria-live="polite"></div>
       ${imported ? `<button class="btn btn--line btn--block" data-reset>Reset to example</button>
         <p class="fine">Removes the imported cycle from this phone and shows the example again. Your history is kept.</p>` : ''}
+    </section>
+
+    <section class="setting">
+      <h3 class="h3">Import history</h3>
+      <p class="fine">Weigh-ins, runs and lifts from before the app, as JSON: <code>{ "weigh_ins": [], "runs": [], "lift_sets": [] }</code>. Nothing is overwritten: anything already logged for that date is skipped, so importing the same file twice adds nothing.</p>
+      <textarea class="import" data-hist-text rows="4" placeholder='{ "weigh_ins": [ … ], "runs": [ … ], "lift_sets": [ … ] }' spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="History JSON"></textarea>
+      <div class="set__row">
+        <label class="btn btn--line file"><input type="file" accept="application/json,.json" data-hist-file>Choose file</label>
+        <button class="btn btn--gold" data-hist-import>Import history</button>
+      </div>
+      <div data-hist-result aria-live="polite"></div>
     </section>
 
     <section class="setting">
@@ -131,6 +143,33 @@ export function openSettings(ctx) {
       toast(res === 'shared' ? 'Backup saved' : 'Backup downloaded');
       closeSheet(); ctx.rerender();
     } catch (e) { toast(`Backup failed: ${e?.message || e}`); }
+  });
+
+  const hOut = body.querySelector('[data-hist-result]');
+  const histText = body.querySelector('[data-hist-text]');
+  body.querySelector('[data-hist-file]').addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try { histText.value = await file.text(); } catch (err) { hOut.innerHTML = `<div class="warn is-open"><p>${ICON.warn}<span>The file could not be read (${esc(err?.message || err)}).</span></p></div>`; }
+  });
+  body.querySelector('[data-hist-import]').addEventListener('click', () => {
+    const r = checkHistory(histText.value);
+    if (!r.ok) { hOut.innerHTML = `<div class="warn is-open"><p>${ICON.warn}<span>${esc(r.error)}</span></p></div>`; return; }
+    const res = importHistory(r.history);
+    M.refreshSnaps(); M.updateBadges();
+    const a = res.added, k = res.skipped;
+    hOut.innerHTML = `
+      <dl class="facts">
+        <div><dt>Weigh-ins</dt><dd>${a.weigh_ins} added, ${k.weigh_ins} skipped</dd></div>
+        <div><dt>Runs</dt><dd>${a.runs} added, ${k.runs} skipped</dd></div>
+        <div><dt>Sets</dt><dd>${a.sets} added, ${k.sets} skipped</dd></div>
+        ${k.invalid ? `<div><dt>Invalid</dt><dd>${k.invalid} left out</dd></div>` : ''}
+      </dl>
+      ${r.warnings.length ? `<div class="warn is-open import__msg"><p>${ICON.warn}<span>${r.warnings.length} problem${r.warnings.length === 1 ? '' : 's'} found; those entries were left out.</span></p>
+        <ul class="warn__list">${r.warnings.slice(0, 50).map((x) => `<li><code>${esc(x.path)}</code><span>${esc(x.msg)}</span></li>`).join('')}</ul>
+        ${r.warnings.length > 50 ? `<p class="fine">${r.warnings.length - 50} more not shown.</p>` : ''}</div>` : ''}`;
+    haptic(12); toast(`History imported: ${a.weigh_ins + a.runs + a.sets} added`);
+    ctx.rerender();
   });
 
   const rOut = body.querySelector('[data-restore]');
